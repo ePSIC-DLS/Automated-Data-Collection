@@ -1,0 +1,9 @@
+func x(a, b, c, i){
+    repeat i {
+        display(a)
+        display(b)
+        display(c)
+    }
+}
+
+x("parameter a", "parameter b", "parameter c", 2)
