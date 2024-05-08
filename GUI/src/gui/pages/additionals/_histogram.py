@@ -44,7 +44,7 @@ class Histogram(CanvasPage, SettingsPage):
         CanvasPage.stop(self)
 
     def compile(self) -> str:
-        return "scan"
+        return ""
 
     def run(self):
         if self._state != utils.StoppableStatus.ACTIVE:
@@ -62,12 +62,16 @@ class Histogram(CanvasPage, SettingsPage):
                                                  int(self._num_groups.focus.get_data()), self._colour)
         x_points[:-1] = x_points[1:]
         x_points[-1] = self._canvas.image_size[0]
+        exit_ = False
         for i, limit in enumerate(x_points):
             if i == greys.shape[0] - 1:
                 end = 255
+                exit_ = True
             else:
                 end = greys[i + 1]
             self._greys[limit] = (greys[i], end)
+            if exit_:
+                break
         with self._canvas as img:
             self._modified_image = img.copy()
         self._min_line()

@@ -1,12 +1,14 @@
+import enum
+import functools
 import re
 import typing
-from typing import Tuple as _tuple, Optional as _None
+from typing import Tuple as _tuple, Optional as _None, List as _list
 
 from PyQt5 import QtWidgets as widgets
 
 from . import pages, bases, utils
 from .. import images, microscope
-from ..language.grammar import KeywordType
+from ..language import OpCodes, vals, objs
 
 app = widgets.QApplication([])
 
@@ -61,6 +63,7 @@ class GUI(widgets.QMainWindow):
                 stage_1.set_pitch_size(pitch)
                 stage_3.set_pitch_size(pitch)
                 stage_4.update_label()
+                stage_p.change_size(value)
             elif name == "scan_resolution":
                 pitch = stage_5.get_setting("scan_size") // (value // size)
                 stage_1.set_pitch_size(pitch)
@@ -68,17 +71,83 @@ class GUI(widgets.QMainWindow):
                 stage_4.update_label()
                 stage_5.update_resolution(value)
 
-        def _auto_variable(name: str, value):
+        def _auto_variable(name: str, value: vals.Value):
+            if name in {"Corner", "Underflow", "Overflow", "Random", "KernelShape", "NumberMatch", "Axis", "Staging"}:
+                _data_failed(NameError(f"Cannot set native variable {name!r}"))
+                return
+            print(f"{name = }, raw_{value = !s}", end=" ")
+            if isinstance(value, vals.Array):
+                value = tuple(map(lambda x: x.raw, value.raw))
+            else:
+                value = value.raw
+            print(f"{value = }")
             for stage, settings in stage_settings.items():
                 if name in settings:
                     stages[stage].set_setting(name, value)
+                    return
             if name == "dwell_time":
                 self._scanner.dwell_time = value
+                stage_m.read()
             elif name == "flyback":
                 self._scanner.flyback = value
+                stage_m.read()
+
+        def _auto_keyword(code: int):
+            if code == OpCodes.SCAN.value:
+                self._jump(stage_h.run, 1, None)()
+            elif code == OpCodes.CLUSTER.value:
+                self._jump(stage_3.automate, 3, None)()
+            elif code == OpCodes.MARK.value:
+                self._jump(stage_4.automate_click, 4, None)()
+            elif code == OpCodes.TIGHTEN.value:
+                stage_4.automate_tighten()
+            else:
+                self._jump(stage_5.automate, 5, (5, 1))
 
         def _data_failed(exc: Exception):
-            stage_a.interpreter().fail(exc)
+            stage_a.interpreter().error(str(exc))
+
+        def _compile() -> str:
+            return "\n".join(compiled for s_ in self._pages if (compiled := s_.compile()))
+
+        def _value(name: str, obj) -> vals.Value:
+            if isinstance(obj, bool):
+                return vals.Bool(obj)
+            elif isinstance(obj, (int, float)):
+                return vals.Number(obj)
+            elif isinstance(obj, str):
+                if name == "algorithm":
+                    return vals.Algorithm(obj)
+                elif name in {"session", "sample"}:
+                    return vals.Path(obj)
+                else:
+                    return vals.String(obj)
+            elif isinstance(obj, enum.Enum):
+                return vals.Number(obj.value)
+            elif isinstance(obj, utils.Design):
+                return objs.NativeClass(obj)
+            try:
+                return vals.Array(*map(functools.partial(_value, ""), obj))
+            except TypeError:
+                pass
+            raise RuntimeError(f"Case {type(obj)} handled ({name=})")
+
+        def _stage_move(argc: int, argv: _list[vals.Value]) -> vals.Value:
+            if argc != 2:
+                raise TypeError(f"Expected 2 arguments, got {argc}")
+            elif any(not isinstance(arg, vals.Array) for arg in argv):
+                raise TypeError("Expected 2 tuples")
+            step_, size_, *rest = map(tuple, map(lambda x: list(map(lambda y: y.raw, x.raw)), argv))
+            if rest:
+                raise TypeError("Expected 2 tuples")
+            if not all((len(x) == 2 and all(int(y) == y for y in x)) for x in (step_, size_)):
+                raise ValueError("Expected numeric tuples of 2 values each")
+
+            def _inner() -> typing.Iterator[vals.Nil]:
+                for _ in self._microscope.subsystems["Stage"].flat_snake(step_, size_):
+                    yield vals.Nil()
+
+            return objs.NativeIterator(_inner())
 
         super().__init__()
         layout = widgets.QVBoxLayout()
@@ -100,7 +169,8 @@ class GUI(widgets.QMainWindow):
         self._scanner = microscope.Scanner(microscope.FullScan((size, size)), dwell_time=15e-6)
 
         self._master.setUsesScrollButtons(False)
-        stage_1 = pages.pipeline.SurveyImage(size, images.RGB(255, 0, 0), 8, self._microscope, self._scanner)
+        stage_m = pages.additionals.Scanner(self._microscope, self._scanner)
+        stage_1 = pages.pipeline.SurveyImage(size, images.RGB(255, 0, 0), 8, self._scanner, stage_m.scan)
         stage_2 = pages.pipeline.ProcessingPipeline(size, stage_1, _data_failed)
         stage_3 = pages.pipeline.Clusters(size, images.RGB(255, 0, 0), 8, stage_2, _data_failed)
         stage_4 = pages.pipeline.Management(size, stage_1, stage_3, _data_failed)
@@ -108,66 +178,57 @@ class GUI(widgets.QMainWindow):
                                             self._microscope, self._scanner, stage_3, stage_2)
 
         stage_h = pages.additionals.Histogram(size, stage_1, images.Grey(255), _data_failed)
-        stage_p = pages.additionals.ScanType(size, images.RGB(255, 0, 0), _data_failed)
-        stage_c = pages.additionals.Manager(_data_failed, self._microscope, self._scanner, (size, size))
+        stage_p = pages.additionals.ScanType(size, images.RGB(0, 255, 0), _data_failed)
+        stage_c = pages.additionals.Manager(_data_failed, self._microscope, self._scanner, (size, size), stage_m.scan)
         stage_f = pages.additionals.DiffractionFilter(stage_3)
-        stage_m = pages.additionals.Scanner(self._scanner)
         corrections = stage_c.corrections()
         focus = corrections["focus"]
         emission = corrections["emission"]
         drift = corrections["drift"]
 
-        script_handlers = {
-            KeywordType.SURVEY: self._jump(stage_h.run, 1, None),
-            KeywordType.SEGMENT: self._jump(stage_3.automate, 3, None),
-            KeywordType.FILTER: stage_f.automate,
-            KeywordType.INTERACT: self._jump(stage_4.automate_click, 4, None),
-            KeywordType.MANAGE: stage_4.automate_tighten,
-            KeywordType.SCAN: self._jump(stage_5.automate, 5, (5, 1))
-        }
         stage_a = pages.additionals.Scripts(
+            _compile,
             _auto_variable,
-            {
-                **{k: stage_1.get_setting(k) for k in stage_1.all_settings()},
-                **{k: stage_h.get_setting(k) for k in stage_h.all_settings()},
-                **{k: stage_2.get_setting(k) for k in stage_2.all_settings()},
-                **{k: stage_3.get_setting(k) for k in stage_3.all_settings()},
-                **{k: stage_f.get_setting(k) for k in stage_f.all_settings()},
-                **{k: stage_4.get_setting(k) for k in stage_4.all_settings()},
-                **{k: stage_p.get_setting(k) for k in stage_p.all_settings()},
-                **{k: stage_5.get_setting(k) for k in stage_5.all_settings()},
-                **{k: focus.get_setting(k) for k in focus.all_settings()},
-                **{k: emission.get_setting(k) for k in emission.all_settings()},
-                **{k: drift.get_setting(k) for k in drift.all_settings()},
-                "corner": images.AABBCorner,
-                "underflow": utils.UnderflowHandler,
-                "overflow": utils.OverflowHandler,
-                "random": utils.RandomTypes,
-                "kernel_shape": images.MorphologicalShape,
-                "number_match": utils.Match,
-                "axis": utils.Extreme,
-                "staging": utils.Stages,
-                "dwell_time": self._scanner.dwell_time,
-                "flyback": self._scanner.flyback,
+            _auto_keyword,
+            **{
+                **{k: _value(k, stage_1.get_setting(k)) for k in stage_1.all_settings()},
+                **{k: _value(k, stage_h.get_setting(k)) for k in stage_h.all_settings()},
+                **{k: _value(k, stage_2.get_setting(k)) for k in stage_2.all_settings()},
+                **{k: _value(k, stage_3.get_setting(k)) for k in stage_3.all_settings()},
+                **{k: _value(k, stage_f.get_setting(k)) for k in stage_f.all_settings()},
+                **{k: _value(k, stage_4.get_setting(k)) for k in stage_4.all_settings()},
+                **{k: _value(k, stage_p.get_setting(k)) for k in stage_p.all_settings()},
+                **{k: _value(k, stage_5.get_setting(k)) for k in stage_5.all_settings()},
+                **{k: _value(k, focus.get_setting(k)) for k in focus.all_settings()},
+                **{k: _value(k, emission.get_setting(k)) for k in emission.all_settings()},
+                **{k: _value(k, drift.get_setting(k)) for k in drift.all_settings()},
             },
-            script_handlers,
-            blur=stage_2.single_stage("blur"),
-            gss_blur=stage_2.single_stage("gss_blur"),
-            sharpen=stage_2.single_stage("sharpen"),
-            median=stage_2.single_stage("median"),
-            edge=stage_2.single_stage("edge"),
-            threshold=stage_2.single_stage("threshold"),
-            open=stage_2.single_stage("open"),
-            close=stage_2.single_stage("close"),
-            gradient=stage_2.single_stage("gradient"),
-            i_gradient=stage_2.single_stage("i_gradient"),
-            e_gradient=stage_2.single_stage("e_gradient"),
-            Raster=stage_p.raster,
-            Snake=stage_p.snake,
-            Spiral=stage_p.spiral,
-            Grid=stage_p.checkerboard,
-            Random=stage_p.random,
-            correct_for=stage_c.run_now
+            Corner=objs.NativeEnum(images.AABBCorner),
+            Randoms=objs.NativeEnum(utils.RandomTypes),
+            KernelShape=objs.NativeEnum(images.MorphologicalShape),
+            NumberMatch=objs.NativeEnum(utils.Match),
+            Axis=objs.NativeEnum(utils.Extreme),
+            Staging=objs.NativeEnum(utils.Stages),
+            dwell_time=_value("", self._scanner.dwell_time),
+            flyback=_value("", self._scanner.flyback),
+            blur=objs.NativeFunc(stage_2.single_stage("blur")),
+            gss_blur=objs.NativeFunc(stage_2.single_stage("gss_blur")),
+            sharpen=objs.NativeFunc(stage_2.single_stage("sharpen")),
+            median=objs.NativeFunc(stage_2.single_stage("median")),
+            edge=objs.NativeFunc(stage_2.single_stage("edge")),
+            threshold=objs.NativeFunc(stage_2.single_stage("threshold")),
+            open=objs.NativeFunc(stage_2.single_stage("open")),
+            close=objs.NativeFunc(stage_2.single_stage("close")),
+            gradient=objs.NativeFunc(stage_2.single_stage("gradient")),
+            i_gradient=objs.NativeFunc(stage_2.single_stage("i_gradient")),
+            e_gradient=objs.NativeFunc(stage_2.single_stage("e_gradient")),
+            Raster=objs.NativeFunc(stage_p.raster),
+            Snake=objs.NativeFunc(stage_p.snake),
+            Spiral=objs.NativeFunc(stage_p.spiral),
+            Grid=objs.NativeFunc(stage_p.grid),
+            Random=objs.NativeFunc(stage_p.random),
+            correct_for=objs.NativeFunc(stage_c.run_now),
+            stage_snake=objs.NativeFunc(_stage_move)
         )
 
         self._floating = pages.additionals.WhatsThis(
@@ -212,9 +273,7 @@ class GUI(widgets.QMainWindow):
         stage_5.settingChanged.connect(_update_pitches)
         stage_p.settingChanged.connect(_update_pitches)
 
-        stage_1.runEnd.connect(lambda: drift.set_ref(stage_1.original.demote("r")))
-        stage_3.runEnd.connect(lambda: drift.set_cluster(stage_3.chosen_cluster(drift.get_setting("radius"))))
-        drift.radiusUpdate.connect(lambda v: drift.set_cluster(stage_3.chosen_cluster(v)))
+        stage_1.driftRegion.connect(drift.set_ref)
         drift.drift.connect(stage_5.update_grids)
         stage_5.scanPerformed.connect(focus.scans_increased)
         stage_5.scanPerformed.connect(drift.scans_increased)
@@ -297,7 +356,8 @@ class GUI(widgets.QMainWindow):
     def closeEvent(self, a0):
         self._stop()
         self._floating.close()
-        self._pages[-2].close()
+        for page in self._pages:
+            page.close()
         bases.ProcessPage.MANAGER.waitForDone()
         super().closeEvent(a0)
 

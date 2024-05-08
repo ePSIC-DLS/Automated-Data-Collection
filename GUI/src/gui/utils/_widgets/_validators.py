@@ -15,7 +15,7 @@ V = typing.TypeVar("V")
 E = typing.TypeVar("E", bound=enum.Enum)
 F = typing.TypeVar("F", bound=enum.Flag)
 
-__all__ = ["ValidatedWidget", "Spinbox", "PercentageBox", "Enum", "MultiEnum", "Flag", "CheckBox", "ComboBox", "Entry"]
+__all__ = ["ValidatedWidget", "Spinbox", "PercentageBox", "Enum", "Flag", "CheckBox", "ComboBox", "Entry"]
 
 
 class ValidatedWidget(widgets.QWidget, abc.ABC, typing.Generic[V], metaclass=AbstractWidget):
@@ -271,7 +271,13 @@ class Enum(widgets.QComboBox, ValidatedWidget[E], typing.Generic[E]):
         self.currentIndexChanged.connect(lambda i: self._validate(members[self._items[i]]))
         self.addItems(self._items)
         self.dataPassed.connect(self._modify)
+        self._cls = members
         self._modify(start)
+
+    def change_data(self, data: V):
+        if isinstance(data, int) or (isinstance(data, float) and int(data) == data):
+            data = self._cls(data)
+        super().change_data(data)
 
     def setCurrentText(self, text: str):
         """
@@ -295,75 +301,6 @@ class Enum(widgets.QComboBox, ValidatedWidget[E], typing.Generic[E]):
         self.setCurrentIndex(self._items.index(txt))
 
 
-class MultiEnum(Enum[enum.Enum]):
-    """
-    Special enumeration combobox designed to handle multiple enumerations in one widget.
-
-    Bound Generics
-    --------------
-    E: enum.Enum
-
-    Attributes
-    ----------
-    _run_pipe: bool
-        Whether to validate. Usually turned off for switching the class used.
-    _classes: tuple[Type[enum.Enum], ...]
-        The enum classes used.
-    _i: int
-        The index of the current class.
-    """
-
-    @property
-    def _pipeline(self) -> validation.Pipeline:
-        return validation.Pipeline.enum(self._classes[self._i])
-
-    @_pipeline.setter
-    def _pipeline(self, value):
-        pass
-
-    def __init__(self, starting_member: enum.Enum, *classes: typing.Type[enum.Enum], current=0):
-        self._run_pipe = True
-        self._classes = classes
-        self._i = current
-        super().__init__(self._classes[self._i], starting_member)
-
-    def jump_to(self, new: int):
-        """
-        Change the class with the specified index.
-
-        This will remove validation, remove all items from the widget, then add all new members to the widget.
-
-        Parameters
-        ----------
-        new: int
-            The index to jump to.
-        """
-        self._run_pipe = False
-        for _ in range(len(self._classes[self._i])):
-            self.removeItem(0)
-        self._i = new
-        self.addItems((member.name for member in self._classes[self._i]))
-        self._run_pipe = True
-        self._validate(self.currentText())
-
-    def jump_by(self, shift: int):
-        """
-        Perform a relative shift.
-
-        This is a `jump_to` that jumps to the index *plus* the specified shift
-
-        Parameters
-        ----------
-        shift: int
-            The relative offset jump.
-        """
-        self.jump_to(self._i + shift)
-
-    def _validate(self, data: typing.Any):
-        if self._run_pipe:
-            super()._validate(data)
-
-
 class Flag(ValidatedWidget[F], typing.Generic[F]):
     dataFailed = ValidatedWidget.dataFailed
     dataPassed = ValidatedWidget.dataPassed
@@ -379,6 +316,12 @@ class Flag(ValidatedWidget[F], typing.Generic[F]):
                 check.setChecked(True)
             layout.addWidget(check)
         self.setLayout(layout)
+        self._cls = members
+
+    def change_data(self, data: V):
+        if isinstance(data, int) or (isinstance(data, float) and int(data) == data):
+            data = self._cls(data)
+        super().change_data(data)
 
     def _update(self, value: F, new: enums.CheckState):
         if new == enums.Checked:

@@ -3,7 +3,7 @@ from typing import Dict as _dict
 
 from ... import utils
 from ..._base import SettingsPage, widgets, core
-from .... import microscope, validation
+from .... import microscope, validation, images
 from ..._errors import *
 
 
@@ -154,7 +154,7 @@ class ConnectionManager(widgets.QWidget):
 class Scanner(SettingsPage):
     settingChanged = SettingsPage.settingChanged
 
-    def __init__(self, scanner: microscope.Scanner):
+    def __init__(self, mic: microscope.Microscope, scanner: microscope.Scanner):
         def _open():
             for cnc in self._connected:
                 if cnc.isVisible():
@@ -164,6 +164,7 @@ class Scanner(SettingsPage):
 
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
         self._scanner = scanner
+        self._mic = mic
 
         self._exposure = utils.LabelledWidget("Dwell Time",
                                               utils.Spinbox(self._scanner.dwell_time, 100e-6,
@@ -187,29 +188,29 @@ class Scanner(SettingsPage):
         for cnctn in self._connected:
             cnctn.exported.connect(self._add_connection)
         self.setLayout(self._layout)
-        self._read()
+        self.read()
 
     @utils.Tracked
     def _add_connection(self, kwargs: _dict[str, object]):
         is_enabled = kwargs.pop("enabled")
         if kwargs["source"] is None:
-            raise GUIError(utils.ErrorSeverity.WARNING, "Invalid Connection",
+            raise GUIError(utils.ErrorSeverity.ERROR, "Invalid Connection",
                            f"Connection {kwargs['line_index']} not successfully setup")
         connection = self._scanner.using_connection(**kwargs)
         if is_enabled:
             connection.activate()
         else:
             connection.deactivate()
-        self._read()
+        self.read()
 
-    def _read(self):
+    def read(self):
         self._exposure.focus.change_data(self._scanner.dwell_time)
         self._flyback.focus.change_data(self._scanner.flyback)
         self._connections.focus.setText(self._scanner.lines)
 
     def _write(self, prop: str, value):
         setattr(self._scanner, prop, value)
-        self._read()
+        self.read()
 
     def close(self):
         for cnc in self._connected:
@@ -227,3 +228,10 @@ class Scanner(SettingsPage):
 
     def clear(self):
         pass
+
+    def scan(self, area: microscope.ScanType, detector_status: bool) -> images.GreyImage:
+        with self._scanner.switch_scan_area(area):
+            with self._scanner.switch_dwell_time(self._exposure.focus.get_data()):
+                with self._mic.subsystems["Deflectors"].switch_blanked(False):
+                    with self._mic.subsystems["Detectors"].switch_inserted(detector_status):
+                        return self._scanner.scan()

@@ -1,13 +1,13 @@
+import functools
 import typing
-from typing import Dict as _dict
-
-import time
+from typing import Dict as _dict, List as _list
 
 from ._01_survey import SurveyImage
 from ... import utils
 from ..._base import CanvasPage, images, SettingsPage
 from ..._errors import *
 from .... import validation
+from ....language import vals
 
 
 class OrderDict(utils.SettingsDict):
@@ -32,43 +32,43 @@ class OrderDict(utils.SettingsDict):
     open_Height: utils.Spinbox
     open_Width: utils.Spinbox
     open_Shape: utils.Enum
-    open_Multiplier: utils.Enum
-    open_Repeats: utils.Enum
+    open_Multiplier: utils.Spinbox
+    open_Repeats: utils.Spinbox
 
     close_Height: utils.Spinbox
     close_Width: utils.Spinbox
     close_Shape: utils.Enum
-    close_Multiplier: utils.Enum
-    close_Repeats: utils.Enum
+    close_Multiplier: utils.Spinbox
+    close_Repeats: utils.Spinbox
 
     gradient_Height: utils.Spinbox
     gradient_Width: utils.Spinbox
     gradient_Shape: utils.Enum
-    gradient_Multiplier: utils.Enum
-    gradient_Repeats: utils.Enum
+    gradient_Multiplier: utils.Spinbox
+    gradient_Repeats: utils.Spinbox
 
     gradient_Height: utils.Spinbox
     gradient_Width: utils.Spinbox
     gradient_Shape: utils.Enum
-    gradient_Multiplier: utils.Enum
-    gradient_Repeats: utils.Enum
+    gradient_Multiplier: utils.Spinbox
+    gradient_Repeats: utils.Spinbox
 
     i_gradient_Height: utils.Spinbox
     i_gradient_Width: utils.Spinbox
     i_gradient_Shape: utils.Enum
-    i_gradient_Multiplier: utils.Enum
-    i_gradient_Repeats: utils.Enum
+    i_gradient_Multiplier: utils.Spinbox
+    i_gradient_Repeats: utils.Spinbox
 
     e_gradient_Height: utils.Spinbox
     e_gradient_Width: utils.Spinbox
     e_gradient_Shape: utils.Enum
-    e_gradient_Multiplier: utils.Enum
-    e_gradient_Repeats: utils.Enum
+    e_gradient_Multiplier: utils.Spinbox
+    e_gradient_Repeats: utils.Spinbox
 
 
 class Order(utils.SettingsPopup):
 
-    def __init__(self):
+    def __init__(self, failure_action: typing.Callable[[Exception], None]):
         super().__init__()
 
         def _transform() -> utils.Enum:
@@ -78,7 +78,7 @@ class Order(utils.SettingsPopup):
             return utils.Spinbox(init, step, pipe)
 
         def _morph(name: str) -> utils.PALFunction:
-            return utils.PALFunction(name,
+            return utils.PALFunction(name, failure_action,
                                      Height=_num(5),
                                      Width=_num(5),
                                      Shape=_transform(),
@@ -86,28 +86,28 @@ class Order(utils.SettingsPopup):
                                      Repeats=_num(1, validation.examples.morph, 1),
                                      )
 
-        self._blur = utils.PALFunction("blur",
+        self._blur = utils.PALFunction("blur", failure_action,
                                        Height=_num(5),
                                        Width=_num(5)
                                        )
-        self._gss_blur = utils.PALFunction("gss_blur", True,
+        self._gss_blur = utils.PALFunction("gss_blur", failure_action, True,
                                            Height=_num(5),
                                            Width=_num(5),
                                            Sigma_X=_num(0, validation.examples.sigma, 1),
                                            Sigma_Y=_num(0, validation.examples.sigma, 1)
                                            )
-        self._sharpen = utils.PALFunction("sharpen",
+        self._sharpen = utils.PALFunction("sharpen", failure_action,
                                           Size=_num(5),
                                           Scale=_num(1, validation.examples.sigma, 1),
                                           Delta=_num(0, validation.examples.sigma, 1)
                                           )
-        self._median = utils.PALFunction("median",
+        self._median = utils.PALFunction("median", failure_action,
                                          Size=_num(5)
                                          )
-        self._edge = utils.PALFunction("edge",
+        self._edge = utils.PALFunction("edge", failure_action,
                                        Size=_num(5)
                                        )
-        self._threshold = utils.PALFunction("threshold", True)
+        self._threshold = utils.PALFunction("threshold", failure_action, True)
         self._open = _morph("open")
         self._close = _morph("close")
         self._gradient = _morph("gradient")
@@ -157,7 +157,8 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
 
     def __init__(self, size: int, previous: SurveyImage, failure_action: typing.Callable[[Exception], None]):
         CanvasPage.__init__(self, size)
-        SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED, advanced=Order)
+        SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
+                              advanced=functools.partial(Order, failure_action))
         self._prev = previous
         self._draw_each = True
 
@@ -205,7 +206,13 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
         self._popup.settingChanged.connect(lambda _, __: self.run())
 
     def compile(self) -> str:
-        pass
+        order = self._popup.widgets()["order"]
+        build = []
+        for fn in order.get_members():
+            if not fn.get_enabled():
+                continue
+            build.append(f"{fn.name()}({fn.params(SettingsPage.getter)})")
+        return "\n".join(build)
 
     @utils.Tracked
     def run(self):
@@ -228,15 +235,24 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
         SettingsPage.stop(self)
         CanvasPage.stop(self)
 
-    def single_stage(self, name: str) -> typing.Callable:
-        return getattr(self, f"_{name}")  # the position will never be an empty string, so use_params is always True
+    def single_stage(self, name: str) -> typing.Callable[[vals.Number, _list[vals.Value]], vals.Value]:
+        fn = getattr(self, f"_{name}")
+
+        def _inner(argc: vals.Number, argv: _list[vals.Value]) -> vals.Value:
+            args = [True, *map(lambda x: x.raw, argv)]
+            if any(not isinstance(arg, (vals.Number,)) for arg in argv):
+                raise TypeError("Expected all numerical parameters")
+            fn(*args)
+            return vals.Nil()
+
+        return _inner
 
     def _make_modified(self):
         if self._prev.modified is None:
             raise StagingError("any preprocessing", "scanning survey image")
         if self._modified_image is not None:
             return
-        self._modified_image = self._prev.modified.demote("r")
+        self._modified_image = self._prev.original.demote("r")
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
 

@@ -1,15 +1,14 @@
 import abc as _abc
-from typing import TypeVar as _GenVar, Generic as _Gen
+from typing import Generic as _Gen, TypeVar as _GenVar
 
 from ._utils import *
-from ._prefix import ListRule
-from .. import _tokens as _t, _nodes as _n
+from .. import _tokens as _t, OpCodes as _Byte
+from ...utils import vals as _v
 
 _T = _GenVar("_T", bound=_t.Token)
-_E = _GenVar("_E", bound=_n.Expr)
 
 
-class InfixRule(_Gen[_E, _T], _abc.ABC):
+class InfixRule(_Gen[_T], _abc.ABC):
     """
     Abstract base class for all rules that happen in the middle of parsing.
 
@@ -27,7 +26,7 @@ class InfixRule(_Gen[_E, _T], _abc.ABC):
     """
 
     @_abc.abstractmethod
-    def parse(self, parser: Consumer, left: _n.Expr, token: _T) -> _E:
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         """
         Parse this particular rule into a valid expression.
 
@@ -35,8 +34,6 @@ class InfixRule(_Gen[_E, _T], _abc.ABC):
         ----------
         parser: Consumer
             The consumer that can parse tokens.
-        left: Expr
-            The expression that comes just before this one.
         token: _T
             The previously consumed token.
 
@@ -60,7 +57,7 @@ class InfixRule(_Gen[_E, _T], _abc.ABC):
         pass
 
 
-class BinaryOperatorRule(InfixRule[_n.BinaryExpr, _t.Token]):
+class BinaryOperatorRule(InfixRule[_t.Token]):
     """
     Concrete rule for parsing binary expressions.
 
@@ -79,63 +76,66 @@ class BinaryOperatorRule(InfixRule[_n.BinaryExpr, _t.Token]):
     def __init__(self, precedence: Precedence):
         self._p = precedence
 
-    def parse(self, parser: Consumer, left: _n.Expr, right: _t.Token) -> _n.BinaryExpr:
-        return _n.BinaryExpr(right, left, parser.expr(self.get_precedence()))
+    def parse(self, parser: Consumer, right: _t.Token, allowed_assignment: bool):
+        parser.expr(self.get_precedence())
+        if right.token_type == _t.TokenType.POW:
+            parser.emit(_Byte.POWER)
+        elif right.token_type == _t.TokenType.PLUS:
+            parser.emit(_Byte.ADD)
+        elif right.token_type == _t.TokenType.NEG:
+            parser.emit(_Byte.SUB)
+        elif right.token_type == _t.TokenType.EQ:
+            parser.emit(_Byte.EQUAL)
+        elif right.token_type == _t.TokenType.NEQ:
+            parser.emit(_Byte.EQUAL, _Byte.INVERT)
+        elif right.token_type == _t.TokenType.LT:
+            parser.emit(_Byte.LESS)
+        elif right.token_type == _t.TokenType.GT:
+            parser.emit(_Byte.MORE)
+        elif right.token_type == _t.TokenType.LTE:
+            parser.emit(_Byte.MORE, _Byte.INVERT)
+        elif right.token_type == _t.TokenType.GTE:
+            parser.emit(_Byte.LESS, _Byte.INVERT)
+        elif right.token_type == _t.TokenType.COMBINE:
+            parser.emit(_Byte.MIX)
 
     def get_precedence(self) -> Precedence:
         return self._p
 
 
-class CallRule(InfixRule[_n.CallExpr, _t.Token]):
-    """
-    Concrete rule for parsing function calls.
+class PrintRule(InfixRule[_t.Token]):
 
-    Bound Generics
-    --------------
-    _E: CallExpr
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
+        parser.emit(_Byte.PRINT)
 
-    _T: Token
-    """
+    def get_precedence(self) -> Precedence:
+        return Precedence.PREFIX
 
-    def parse(self, parser: Consumer, left: _n.Expr, token: _T) -> _n.CallExpr:
-        items = ListRule.group(parser, _t.TokenType.END_CALL, "function arguments")
-        return _n.CallExpr(left, *items)
+
+class CallRule(InfixRule[_t.Token]):
+
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
+        parser.emit(_Byte.CALL, self.list(parser))
 
     def get_precedence(self) -> Precedence:
         return Precedence.CALL
 
-
-class SetRule(InfixRule[_n.SetExpr, _t.Token]):
-    """
-    Concrete rule for parsing assignment expressions.
-
-    Bound Generics
-    --------------
-    _E: SetExpr
-
-    _T: Token
-    """
-
-    def parse(self, parser: Consumer, left: _n.Expr, token: _t.Token) -> _n.SetExpr:
-        return _n.SetExpr(token, left, parser.expr(self.get_precedence()))
-
-    def get_precedence(self) -> Precedence:
-        return Precedence.ASSIGN
+    @classmethod
+    def list(cls, parser: Consumer) -> int:
+        count = 0
+        while not parser.match(_t.TokenType.END_CALL):
+            parser.expr()
+            count += 1
+            if not parser.check(_t.TokenType.END_CALL):
+                parser.consume_type(_t.TokenType.SEPARATE, "Expected {lookup} between arguments")
+        return count
 
 
-class GetRule(InfixRule[_n.GetExpr, _t.Token]):
-    """
-    Concrete rule for parsing property access.
+class Get(InfixRule[_t.Token]):
 
-    Bound Generics
-    --------------
-    _E: GetExpr
-
-    _T: Token
-    """
-
-    def parse(self, parser: Consumer, left: _n.Expr, token: _t.Token) -> _n.GetExpr:
-        return _n.GetExpr(token, left, parser.consume(_t.IdentifierToken, "Expected a valid identifier to access"))
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
+        name = parser.chunk.add(_v.String(parser.consume(_t.IdentifierToken, "Expected field name").src))
+        parser.emit(_Byte.GET_FIELD, name)
 
     def get_precedence(self) -> Precedence:
         return Precedence.CALL

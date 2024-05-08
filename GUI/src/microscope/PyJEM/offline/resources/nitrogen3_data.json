@@ -1,0 +1,42 @@
+﻿[
+  {
+    "name": "No. 0",
+    "station": 0,
+    "cartridge": 0,
+    "port": 0,
+    "id": 0,
+    "angle": 0
+  },
+  {
+    "name": "No. 1",
+    "station": 0,
+    "cartridge": 0,
+    "port": 0,
+    "id": 1,
+    "angle": 0
+  },
+  {
+    "name": "No. 2",
+    "station": 0,
+    "cartridge": 0,
+    "port": 0,
+    "id": 2,
+    "angle": 0
+  },
+  {
+    "name": "No. 3",
+    "station": 0,
+    "cartridge": 0,
+    "port": 0,
+    "id": 3,
+    "angle": 0
+  },
+  {
+    "name": "No. 4",
+    "station": 0,
+    "cartridge": 0,
+    "port": 0,
+    "id": 4,
+    "angle": 0
+  }
+]

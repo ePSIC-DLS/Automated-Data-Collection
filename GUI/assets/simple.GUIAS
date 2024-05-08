@@ -1,9 +1,1 @@
-func x(a, b, c, i){
-    repeat i {
-        display(a)
-        display(b)
-        display(c)
-    }
-}
-
-x("parameter a", "parameter b", "parameter c", 2)
+selected = Random(Randoms.UNIFORM, 40, [1, 1], 1, 0, 0, 3, 20)

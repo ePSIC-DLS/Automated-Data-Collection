@@ -14,8 +14,6 @@ from .... import validation
 class FilterDict(utils.SettingsDict):
     match: utils.PercentageBox
     order: utils.OrderedGroup[widgets.QLabel]
-    padding: utils.SizeControl
-    dir: utils.XDControl[utils.Enum[utils.Extreme]]
 
 
 class Filter(utils.SettingsPopup):
@@ -26,26 +24,13 @@ class Filter(utils.SettingsPopup):
         self._match.dataPassed.connect(lambda v: self.settingChanged.emit("match", v))
         self._match.dataFailed.connect(failure_action)
         self._order = utils.OrderedGroup[widgets.QLabel]()
-        self._pad_value = utils.SizeControl(-1, 1, validation.examples.pad, mode=utils.RoundingMode.TRUNCATE,
-                                            display=(lambda f: "auto" if f == -1 else str(f),
-                                                     lambda s: -1 if s == "auto" else int(s))
-                                            )
-        self._pad_value.dataPassed.connect(lambda v: self.settingChanged.emit("padding", v))
-        self._pad_value.dataFailed.connect(failure_action)
-        self._pad_type = utils.XDControl(2, utils.Enum, members=utils.Extreme, start=utils.Extreme.MAXIMA)
-        self._pad_type.dataPassed.connect(lambda v: self.settingChanged.emit("dir", v))
-        self._pad_type.dataFailed.connect(failure_action)
         self._layout.addWidget(utils.DoubleLabelledWidget("Match Percentage", self._match,
                                                           "The percentage of a region within the cluster for validity"))
-        self._layout.addWidget(utils.DoubleLabelledWidget("Padding Value", self._pad_value,
-                                                          "The amount of padding around each cluster"))
-        self._layout.addWidget(utils.DoubleLabelledWidget("Padding Direction", self._pad_type,
-                                                          "The direction of padding around each cluster"))
         self._layout.addWidget(utils.DoubleLabelledWidget("Cluster Order", self._order,
                                                           "The order of exported clusters"))
 
     def widgets(self) -> FilterDict:
-        return {"match": self._match, "order": self._order, "padding": self._pad_value, "dir": self._pad_type}
+        return {"match": self._match, "order": self._order}
 
 
 class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
@@ -90,6 +75,9 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         # noinspection PyCallingNonCallable
         self._export.clicked.connect(lambda: self._export_grids())
 
+        self._click_all = widgets.QPushButton("Mark all clusters")
+        self._click_all.clicked.connect(self.automate_click)
+
         self._regular.addWidget(self._made)
         self._regular.addWidget(self._found)
         self._regular.addWidget(self._overlap)
@@ -97,6 +85,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._regular.addWidget(self._pitch)
         self._regular.addWidget(self._tighten)
         self._regular.addWidget(self._export)
+        self._regular.addWidget(self._click_all)
 
         self.setLayout(self._layout)
         self._popup.widgets()["order"].orderChanged.connect(self._change_order)
@@ -134,13 +123,13 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
             return
         pitch = self._selected.pitch_size()
         self._pitch.setText(f"Grid Size: {pitch}")
-        pitch, overlap, pad, overlaps = self._settings()
+        pitch, overlap, overlaps = self._settings()
         for cluster in self._order:
             if not cluster.locked:
                 continue
             try:
                 self._clusters[cluster] = tuple(
-                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0], pad[0], pad[1])
+                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
                     for off_dir in overlaps
                 )
             except ValueError as err:
@@ -246,8 +235,9 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
             self._update_cluster(x, y)
 
     @utils.Tracked
+    @utils.Thread.decorate(manager=ProcessPage.MANAGER)
     def _mark(self, x: int, y: int):
-        pitch, overlap, pad, overlaps = self._settings()
+        pitch, overlap, overlaps = self._settings()
         for cluster in self._order:
             if (x, y) not in cluster:
                 continue
@@ -256,7 +246,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                                f"Cannot mark cluster at {(x, y)} multiple times")
             try:
                 self._clusters[cluster] = tuple(
-                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0], pad[0], pad[1])
+                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
                     for off_dir in overlaps
                 )
             except ValueError as err:
@@ -269,7 +259,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
 
     @utils.Tracked
     def _update_cluster(self, x: int, y: int):
-        pitch, overlap, pad, overlaps = self._settings()
+        pitch, overlap, overlaps = self._settings()
         for cluster in self._order:
             if (x, y) not in cluster:
                 continue
@@ -278,7 +268,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                                f"Cannot update unmarked cluster at {(x, y)}")
             try:
                 self._clusters[cluster] = tuple(
-                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0], pad[0], pad[1])
+                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
                     for off_dir in overlaps
                 )
             except ValueError as err:
@@ -288,11 +278,9 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
             raise GUIError(utils.ErrorSeverity.ERROR, "Missing Cluster", f"No cluster recorded at {x, y}")
         self._draw()
 
-    def _settings(self) \
-            -> _tuple[int, int, _tuple[_tuple[int, int], _tuple[utils.Extreme, utils.Extreme]], _list[utils.Overlap]]:
+    def _settings(self) -> _tuple[int, int, _list[utils.Overlap]]:
         pitch = self._selected.pitch_size()
         overlap = int((1 - self._overlap.focus.get_data()) * pitch)
-        pad = self.get_setting("padding"), self.get_setting("dir")
         overlaps = [utils.Overlap(0)]
         for i, flag in enumerate(self._overlap_directions.focus.get_data()):
             if not flag:
@@ -303,12 +291,18 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                 overlaps.append(utils.Overlap.Y)
             else:
                 overlaps.append(utils.Overlap.X | utils.Overlap.Y)
-        return pitch, overlap, pad, overlaps
+        return pitch, overlap, overlaps
 
     def automate_click(self):
-        self._choose_segmented()
+        pitch, overlap, overlaps = self._settings()
         for cluster in self._order:
-            self._mark.py_func(*cluster.position())
+            try:
+                self._clusters[cluster] = tuple(
+                    cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
+                    for off_dir in overlaps
+                )
+            except ValueError:
+                continue
 
     def automate_tighten(self):
         if self._modified_image is None:
@@ -317,23 +311,23 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._export_grids.py_func()
 
     def all_settings(self) -> typing.Iterator[str]:
-        yield from ("overlap", "overlap_directions", "match", "padding", "dir")
+        yield from ("overlap", "overlap_directions", "match")
 
     def help(self) -> str:
         s = f"""This page allows for manging any clusters - either made by the user or found by DBSCAN.
 
         Marking a cluster happens by click, and is when a grid is placed around the bounding box of a cluster.
         This is regarded as a "loose" grid, as it doesn't conform to the edges of the cluster.
-        
+
         The different directions of overlap can be modified, as well as the percentage of the grid covered by overlap.
         The grid size is a function of: 
             the size of the survey image;
             the resolution to upscale to;
             the size of each small image.
-        
+
         Tightening of a grid involves identifying which individual squares have enough cluster in to be valid.
         This will make the grid conform to the edges of the cluster better than a loose grid.
-        
+
         The final stage is to export the tightened grids, as this ensures they are saved (and their order maintained);
         when switching between sources.
 
@@ -341,15 +335,15 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         --------
         Overlap Percentage: 
             {validation.examples.overlap}
-            
+
             The percentage of overlap to have per grid. 
             Note that this is an offset from the first square;
             so a 10% overlap means that 10% of the first square overlaps with the first square in the next grid.
         Overlap Directions:
             {validation.examples.any_bool}
-            
+
             The enabled directions for overlap. This creates at most 4 grids on each cluster (minimum 1).
-            
+
             An x-overlap creates another grid on top of the existing grids. This grid has a horizontal offset *only*.
             A y-overlap creates another grid on top of the existing grids. This grid has a vertical offset *only*.
             An xy-overlap creates another grid on top of the existing grids. This grid has offset in *both* directions.
@@ -359,20 +353,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
     def advanced_help(self) -> str:
         s = f"""Match Percentage:
             {validation.examples.match}
-    
-            The percentage of pixels required to mark a loose grid as tight. 
-            Higher values will miss more of the cluster, but will eliminate more dead space.
-        Padding Value:
-            {validation.examples.pad}
-    
-            The amount of pixels extra padding to apply in the specified `Padding Direction` to each cluster;
-            prior to creating the grids. 
-            When set to "-1", automatic padding is applied which will continue to pad;
-            until it reaches an even multiple of the pitch size.
-        Padding Direction:
-            {self.get_control('dir').validation_pipe()}
-    
-            The direction in which to apply padding.
-            MINIMA means it increases size where co-ordinates tend to 0 (left or top);
-            MAXIMA means it increases size where co-ordinates tend to {self._canvas.image_size[0]} (right or bottom)."""
+
+            The percentage of pixels required to mark a loose grid as tight.
+            Higher values will miss more of the cluster, but will eliminate more dead space."""
         return s

@@ -25,6 +25,10 @@ class Predicate(typing.Generic[T], abc.ABC):
     def __call__(self, t: T) -> bool:
         pass
 
+    @abc.abstractmethod
+    def __str__(self) -> str:
+        pass
+
 
 class VariablePredicate(Predicate[IdentifierToken]):
     """
@@ -58,6 +62,9 @@ class VariablePredicate(Predicate[IdentifierToken]):
             Whether the lexme of the token is the specified name.
         """
         return self._src == t.src
+
+    def __str__(self) -> str:
+        return f"A variable named '{self._src}'"
 
 
 class KeywordPredicate(Predicate[KeywordToken]):
@@ -93,6 +100,9 @@ class KeywordPredicate(Predicate[KeywordToken]):
         """
         return self._keyword_type == t.keyword_type
 
+    def __str__(self) -> str:
+        return repr(TYPE_KEYWORDS[self._keyword_type])
+
 
 class IntegerPredicate(Predicate[NumToken]):
     """
@@ -118,6 +128,9 @@ class IntegerPredicate(Predicate[NumToken]):
             Whether the truncated token value is equal to the full token value.
         """
         return int(t.value) == t.value
+
+    def __str__(self) -> str:
+        return "An integer"
 
 
 class BasePredicate(Predicate[BaseNumToken]):
@@ -155,3 +168,6 @@ class BasePredicate(Predicate[BaseNumToken]):
             Whether the base of the token is equal to the base expected.
         """
         return t.number_type == self._map[self._base]
+
+    def __str__(self) -> str:
+        return f"A base-{self._base} literal"

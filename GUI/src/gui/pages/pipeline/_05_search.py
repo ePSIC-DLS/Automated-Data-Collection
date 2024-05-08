@@ -2,7 +2,7 @@ import functools
 import os
 import typing
 from datetime import datetime
-from typing import Tuple as _tuple
+from typing import Tuple as _tuple, Optional as _None
 
 import h5py
 import numpy as np
@@ -16,6 +16,8 @@ from ... import utils
 from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widgets
 from ..._errors import *
 from .... import microscope, validation
+
+import logging
 
 Corners = images.AABBCorner
 
@@ -91,7 +93,7 @@ class GridSettings(utils.SettingsPopup):
         self._depth.dataPassed.connect(lambda v: self.settingChanged.emit("bit_depth", v))
         self._depth.dataPassed.connect(self._edit_exposure)
         self._depth.dataFailed.connect(failure_action)
-        self._path = utils.Entry("X:/data/2023/{session}/Merlin/{sample}", validation.examples.file_path, "\"")
+        self._path = utils.Entry("X:/data/2024/{session}/Merlin/{sample}", validation.examples.file_path, "\"")
         self._path.dataPassed.connect(lambda v: self.settingChanged.emit("save_path", v))
         self._path.dataFailed.connect(failure_action)
         self._extras = utils.Flag(utils.Stages, utils.Stages(15))
@@ -175,6 +177,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._survey = _survey_image
         self._automate = False
         self._i = 0
+        self._logger: _None[logging.Logger] = None
 
         self._scan_mode = utils.LabelledWidget("Merlin Scan Mode", utils.CheckBox("&M", True), utils.LabelOrder.SUFFIX)
         self._scan_mode.focus.dataPassed.connect(lambda v: self.settingChanged.emit("scan_mode", v))
@@ -205,7 +208,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._mic = mic
         self._scanner = scanner
 
-        self._resolution = 16384
+        self._resolution = 4096  # 16384
 
     def clear(self):
         CanvasPage.clear(self)
@@ -230,7 +233,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._resolution = new
 
     def update_grids(self, x_shift: int, y_shift: int):
-        print(f"Shifting all squares by {x_shift, y_shift}")
+        msg = f"Shifting all squares by {x_shift, y_shift}"
+        if self._logger is None:
+            print(msg)
+        else:
+            self._logger.debug(msg)
         lim = self._canvas.image_size[0]
         for grid in self._regions:
             grid.move((x_shift, y_shift))
@@ -314,6 +321,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             print('**5**')
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
+                time.sleep(1)
                 print('6')
                 self._scanner.scan(return_=False)
                 del merlin_cmd
@@ -329,7 +337,6 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         exposure = self.get_setting("exposure_time")
         bit_depth = self.get_setting("bit_depth")
         images_saved = self.get_setting("checkpoints")
-        original = self._original_image.image.copy()
         do_merlin = self._scan_mode.focus.isChecked()
         save_path = self.get_setting("save_path").format(session=self._session.focus.text()[1:-1],
                                                          sample=self._sample.focus.text()[1:-1]).replace("/", "\\")
@@ -340,7 +347,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         if microscope.ONLINE:
             self._scanner.scan_area = microscope.FullScan((self._resolution, self._resolution))
             self._scanner.dwell_time = exposure  # add pattern
+
         for i, region in enumerate(self._regions):
+            original = self._original_image.image()
             self._i = i + 1
             if i < current:
                 continue
@@ -357,6 +366,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             with self._canvas as draw:
                 draw.image.reference()[:, :, :] = original.copy()
                 region.draw(draw, self._marker, filled=True)
+                region.draw(self._original_image, self._marker)
                 if not microscope.ONLINE:
                     time.sleep(1)
 
@@ -368,6 +378,12 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val), top_left_4k)
                     with self._scanner.switch_scan_area(scan_area):
+                        if not os.path.exists(save_path):
+                            os.makedirs(save_path)
+                            print(f"Made dir: {save_path}")
+                        self._logger = logging.Logger("drift", level=logging.DEBUG)
+                        logging.basicConfig(level=logging.DEBUG,
+                                            filename=f"{save_path}\\drift.log", filemode="a", force=True)
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         params = f"{save_path}\\{stamp}.hdf5"
                         if not do_merlin:
@@ -375,9 +391,6 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         else:
                             hostname = "10.182.0.5"
                             print(params)
-                            if not os.path.exists(save_path):
-                                os.makedirs(save_path)
-                                print(f"Made dir: {save_path}")
                         _file_write()
                         if do_merlin:
                             with h5py.File(params, "a") as co_ords:
@@ -394,7 +407,10 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             if self._progress.isEnabled():
                 self.scanPerformed.emit()
                 self.clusterScanned.emit(i + 1)
-            self.runEnd.emit()
+
+        with self._canvas as draw:
+            draw.image.reference()[:, :, :] = original.copy()
+        self.runEnd.emit()
 
     def automate(self):
         self._automate = True
@@ -412,7 +428,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
     def help(self) -> str:
         s = f"""This page allows for scanning each grid square managed by the cluster manager.
-        
+
         Each grid square will be scanned by using the proposed scan pattern;
         and will be in a higher resolution to allow for better data.
 
@@ -420,16 +436,16 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         --------
         Merlin Scan Mode:
             {validation.examples.any_bool}
-            
+
             Whether to activate the Merlin software to perform 4D data collection. While this collects more data;
             (and different kinds of data) it is a much slower scan and can increase beam damage of the sample.
         Session:
             {validation.examples.save_path}
-            
+
             The session to be substituted into the save path.
         Sample:
             {validation.examples.save_path}
-            
+
             The sample to be substituted into the save path.
         For advanced settings, see the help page."""
         return s
@@ -437,31 +453,31 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     def advanced_help(self) -> str:
         s = f"""Scan Size:
                 {self.get_control('scan_size').validation_pipe()}
-                
+
                 The square size of the scan (in pixels). This will affect the grid size of each cluster.
         Dwell Value:
             {self.get_control('exposure_time').validation_pipe()}
-            
+
             The exposure time in seconds. Dependant on the bit depth and whether a Merlin scan is being performed.
-            
+
             If doing a merlin scan, then it should be between 40ns and 70s (which is formatted as '70 s').
             Otherwise, it has an upper limit of 5ms and a variable lower limit (dependant on bit depth).
         Bit Depth:
             {self.get_control('bit_depth').validation_pipe()}
-            
+
             The bit depth to use when communicating with Merlin.
-            
+
             When using 12-bit depth, the lower limit of the `Dwell Value` is 1ms;
             When using 6-bit depth, the lower limit of the `Dwell Value` is 600us;
             When using 1-bit depth, the lower limit of the `Dwell Value` is 100us.
         Save Path:
             {validation.examples.file_path}
-            
+
             The save path to use for the output files.
             Using python f-string style substitution ({{session}}) will substitute the relevant variable.
             Note that "session" and "sample" are the only supported variables.
         Additional Files:
             {self.get_control('checkpoints').validation_pipe()}
-            
+
             The extra files to save into the HDF5 file. Each image will have its own dataset."""
         return s

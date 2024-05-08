@@ -66,6 +66,8 @@ class TokenType(_Base):
     BIN = "\\b"
     SEPARATE = ","
     ACCESS = "."
+    ASSIGN = "="
+    OUTPUT = "?"
 
     START_CALL = "("
     END_CALL = ")"
@@ -74,9 +76,17 @@ class TokenType(_Base):
     START_BLOCK = "{"
     END_BLOCK = "}"
 
-    POW = "^"
     NEG = "-"
-    ASSIGN = "="
+    INV = "!"
+    POW = "^"
+    PLUS = "+"
+    COMBINE = "|"
+    EQ = "=="
+    LT = "<"
+    GT = ">"
+    NEQ = "!="
+    LTE = "<="
+    GTE = ">="
 
 
 SYMBOLS_TYPE = {member.value: member for member in TokenType if "#" not in member.value}
@@ -129,6 +139,8 @@ class KeywordType(_Base):
         Recognised by 'wait', it represents delaying for a certain amount of time.
     EXIT
         Recognised by 'return', it represents exiting from a function.
+    ALIAS
+        Recognised by 'as', it allows for a variable definition in loops.
     """
     SURVEY = "Scan"
     SEGMENT = "Cluster"
@@ -145,11 +157,14 @@ class KeywordType(_Base):
     LP_NORM = "Minkowski"
     ON = "true"
     OFF = "false"
+    NULL = "void"
 
     VAR_DEF = "var"
     FUNC_DEF = "func"
     GEN_DEF = "iter"
-    LOOP = "repeat"
+    ENUM_DEF = "namespace"
+    LOOP_RANGE = "for"
+    LOOP_ITER = "foreach"
     DELAY = "wait"
     EXIT = "return"
 

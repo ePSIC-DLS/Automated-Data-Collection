@@ -84,14 +84,14 @@ class CanvasPage(Page, abc.ABC):
         if movement_handler is None:
             movement_handler = self._tooltip
         Page.__init__(self)
-        self._display_type = utils.ColourDisplay.HEX
+        self._display_type = utils.ColourDisplay.RGB
         self._original_image: typing.Optional[images.RGBImage] = None
         self._modified_image: typing.Optional[images.RGBImage] = None
 
         self._canvas = utils.Canvas((size, size), live_mouse=canvas_tracks)
         self._canvas.mouseMoved.connect(movement_handler)
 
-        self._colour_option = utils.Enum(utils.ColourDisplay, utils.ColourDisplay.HEX)
+        self._colour_option = utils.Enum(utils.ColourDisplay, utils.ColourDisplay.RGB)
         self._colour_option.currentIndexChanged.connect(
             lambda d: setattr(self, "_display_type", utils.ColourDisplay(d + 1))
         )
@@ -229,12 +229,14 @@ class SettingsPage(Page, abc.ABC, typing.Generic[P]):
 
     @staticmethod
     def getter(widget: widgets.QWidget):
+        if isinstance(widget, utils.LabelledWidget):
+            return SettingsPage.getter(widget.focus)
         if isinstance(widget, (utils.ValidatedWidget, utils.XDControl)):
             return widget.get_data()
         elif isinstance(widget, widgets.QCheckBox):
             return widget.isChecked()
         elif isinstance(widget, utils.OrderedGroup):
-            return widget.get_members()
+            return tuple(map(SettingsPage.getter, widget.get_members()))
         elif isinstance(widget, utils.ScanPatternGroup):
             return widget.chosen()
         elif isinstance(widget, widgets.QLabel):

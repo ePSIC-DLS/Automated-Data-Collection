@@ -233,42 +233,6 @@ class RandomTypes(_Base):
     UNIFORM = _member()
 
 
-class UnderflowHandler(_Base):
-    """
-    Enumeration to represent the different ways to handle a value underflowing.
-
-    Members
-    -------
-    DROP
-        Remove it.
-    TRUNCATE
-        Make it the minimum value.
-    ABS
-        Turn it to its absolute value (and let the overflow handler handle it if required).
-    """
-    DROP = _member()
-    TRUNCATE = _member()
-    ABS = _member()
-
-
-class OverflowHandler(_Base):
-    """
-    Enumeration to represent the different ways to handle a value overflowing.
-
-    Members
-    -------
-    DROP
-        Remove it.
-    TRUNCATE
-        Make it the maximum value.
-    MODULO
-        Wrap it around the maximum using a modulo operation.
-    """
-    DROP = _member()
-    TRUNCATE = _member()
-    MODULO = _member()
-
-
 class Corrections(_Bitwise):
     """
     Bitwise Enumeration to represent the different corrections possible.

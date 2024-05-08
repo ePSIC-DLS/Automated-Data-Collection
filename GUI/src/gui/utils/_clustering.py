@@ -2,6 +2,7 @@ import typing
 from typing import Tuple as _tuple, List as _list
 
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 
 from ._enums import *
@@ -38,6 +39,10 @@ class ScanRegion:
     def disabled(self, value: bool):
         self._disabled = value
 
+    @property
+    def size(self) -> int:
+        return self._delta
+
     def __init__(self, top_left: _tuple[int, int], size: int, scan_resolution: int):
         self._disabled = False
         self._left, self._top = top_left
@@ -45,6 +50,9 @@ class ScanRegion:
         self._bottom = self._top + size
         self._scan_res = scan_resolution
         self._delta = size
+
+    def __str__(self) -> str:
+        return f"Region {self._left, self._top} -> {self._right, self._bottom} @ {self._scan_res}x{self._scan_res}"
 
     def __hash__(self) -> int:
         return hash((self._left, self._top, self._right, self._bottom, self._scan_res))
@@ -118,8 +126,8 @@ class ScanRegion:
         if not isinstance(other, Cluster):
             return NotImplemented
         area = other.cluster.region(self[images.AABBCorner.TOP_LEFT], self[images.AABBCorner.BOTTOM_RIGHT])
-        y_valid, x_valid = np.nonzero(area.image.reference())
-        return y_valid.shape[0] + x_valid.shape[0]
+        count = np.count_nonzero(area.image())
+        return count
 
     __rand__ = __and__
 
@@ -235,12 +243,7 @@ class Grid:
         """
         return self._owner
 
-    def __init__(self, sq_size: int, offset: _tuple[int, int], resolution: int, marking: "Cluster",
-                 pad_val: _tuple[int, int], pad_dir: _tuple[Extreme, Extreme]):
-
-        if any(p < -1 for p in pad_val):
-            raise ValueError(f"Expected positive padding (or -1 for automatic)")
-        self._pad_val, self._pad_dir = pad_val, pad_dir
+    def __init__(self, sq_size: int, offset: _tuple[int, int], resolution: int, marking: "Cluster"):
         self._owner = marking
         self._is_tight = False
         self._pitch_size = sq_size
@@ -300,38 +303,33 @@ class Grid:
 
         def _valid(region: ScanRegion) -> bool:
             try:
-                min_abs = int(min_rel * self._pitch_size)
-                return (region & self._owner) >= min_abs
+                min_abs = int(min_rel * self._pitch_size ** 2)
+                count = (region & self._owner)
+                return count >= min_abs
             except ValueError:
                 return False
 
         self._tight = list(filter(_valid, self._all))
         self._is_tight = True
 
-    # def update_grid_size(self, new_size: int, match: float):
-    #     self._pitch_size = new_size
-    #     self._all = list(self._regions())
-    #     if self._is_tight:
-    #         self.tighten(match)
-
     def _regions(self) -> typing.Iterator[ScanRegion]:
         def _pad(minima: int, maxima: int, i: int) -> _tuple[int, int]:
-            padding, direction = self._pad_val[i], self._pad_dir[i]
-            if padding > -1:
-                if direction == Extreme.MINIMA:
-                    minima -= padding
-                else:
-                    maxima += padding
-            else:
-                while (maxima - minima) % self._pitch_size:
-                    if direction == Extreme.MINIMA:
-                        minima -= 1
-                    else:
-                        maxima += 1
-            if minima < 0 or maxima > self._resolution:
-                axis = "x" if i == 0 else "y"
-                pad = f"by {padding}" if padding != -1 else "automatically"
-                raise ValueError(f"Cannot pad the {direction.name.lower()} of the {axis}-axis {pad}.")
+            do_min = do_max = True
+            while (maxima - minima) % self._pitch_size:
+                if not do_max and not do_min:
+                    raise ValueError("Cluster too large!")
+                if do_min:
+                    minima -= 1
+                if (maxima - minima) % self._pitch_size and minima > 0 and maxima < self._resolution:
+                    break
+                if do_max:
+                    maxima += 1
+                if minima < 0:
+                    minima = 0
+                    do_min = False
+                elif maxima >= self._resolution:
+                    maxima = self._resolution - 1
+                    do_max = False
             return minima, maxima
 
         left, right = self._owner.extreme(Axis.X, Extreme.MINIMA), self._owner.extreme(Axis.X, Extreme.MAXIMA)
@@ -431,7 +429,11 @@ class Cluster:
         promoted_image = image.upchannel().find_replace(self._label, images.Grey(255))
         demoted_image = promoted_image.demote("r")
         self._binary = demoted_image.downchannel(images.Grey(0), images.Grey(255))
-        self._y, self._x = np.nonzero(self._binary.image.reference())
+        img = self._binary.image.reference()
+        rows_f, = np.nonzero(np.sum(img, axis=0))
+        cols_f, = np.nonzero(np.sum(img, axis=1))
+        self._min = (rows_f[0], cols_f[0])
+        self._max = (rows_f[-1], cols_f[-1])
         self._marked = False
 
     def __contains__(self, point: _tuple[int, int]) -> bool:
@@ -487,7 +489,7 @@ class Cluster:
             y = Extreme.MAXIMA
         return self.extreme(Axis.X, x), self.extreme(Axis.Y, y)
 
-    def centre(self) -> _tuple[int, int]:
+    def position(self) -> _tuple[int, int]:
         """
         Get the centre of the cluster (based on the bounding box).
 
@@ -496,8 +498,7 @@ class Cluster:
         tuple[int, int]
             The centre of the cluster's bounding box.
         """
-        (left, top), (right, bottom) = self[images.AABBCorner.TOP_LEFT], self[images.AABBCorner.BOTTOM_RIGHT]
-        return left + right // 2, top + bottom // 2
+        return self._min
 
     def extreme(self, axis: Axis, extreme: Extreme) -> int:
         """
@@ -515,9 +516,9 @@ class Cluster:
         int
             The bounding box extremity.
         """
-        axis_vals = self._y if axis == axis.Y else self._x
-        extreme_func = np.max if extreme == Extreme.MAXIMA else np.min
-        return extreme_func(axis_vals)
+        corner = self._min if extreme == Extreme.MINIMA else self._max
+        index = 0 if axis == Axis.X else 1
+        return corner[index]
 
     def size(self, axis: Axis) -> int:
         """
@@ -535,8 +536,7 @@ class Cluster:
         """
         return self.extreme(axis, Extreme.MAXIMA) - self.extreme(axis, Extreme.MINIMA)
 
-    def divide(self, square: int, off_val: int, off_dir: Overlap, resolution: int,
-               pad_val: _tuple[int, int], pad_dir: _tuple[Extreme, Extreme]) -> Grid:
+    def divide(self, square: int, off_val: int, off_dir: Overlap, resolution: int) -> Grid:
         """
         Divide the bounding box into a singular grid.
 
@@ -550,10 +550,6 @@ class Cluster:
             The direction of the overlap.
         resolution: int
             The scan resolution to use in the grid.
-        pad_val: tuple[int, int]
-            The padding amount.
-        pad_dir: tuple[Extreme, Extreme]
-            The padding direction.
 
         Returns
         -------
@@ -561,7 +557,7 @@ class Cluster:
             The grid overlaid over this cluster, created according to the specification of the parameters.
         """
         return Grid(square, (off_val if Overlap.X & off_dir else 0, off_val if Overlap.Y & off_dir else 0), resolution,
-                    self, pad_val, pad_dir)
+                    self)
 
     @classmethod
     def from_vertices(cls, v1: _tuple[int, int], v2: _tuple[int, int], v3: _tuple[int, int], *v_e: _tuple[int, int],

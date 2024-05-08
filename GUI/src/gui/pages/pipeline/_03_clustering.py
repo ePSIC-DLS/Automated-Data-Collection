@@ -135,7 +135,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         ProcessPage.stop(self)
 
     def compile(self) -> str:
-        return "cluster\nmark"
+        return "Cluster\nmark"
 
     # @utils.Tracked
     def chosen_cluster(self, radius: int) -> utils.Cluster:

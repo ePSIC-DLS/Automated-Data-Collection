@@ -5,10 +5,12 @@ from PyQt5 import QtCore as core, QtWidgets as widgets
 from PyQt5.QtCore import Qt as enums
 
 from ._containers import LabelledWidget
-from ._validators import Spinbox, V, ValidatedWidget
+from ._validators import Spinbox, ValidatedWidget
+from .._patterns import Design
 from .._enums import *
 from .... import validation
 
+V = typing.TypeVar("V")
 VW = typing.TypeVar("VW", bound=ValidatedWidget)
 
 __all__ = ["XDControl", "SizeControl", "ScanPattern", "PALFunction", "ScanPatternGroup", "Counter"]
@@ -156,11 +158,15 @@ class ScanPattern(widgets.QWidget):
     """
     MAX_WIDTH = 2
 
-    def __init__(self, name: str, shortcut: str = None, live=False, **options: ValidatedWidget):
+    def __init__(self, cls: typing.Type[Design], name: str = None, shortcut: str = None, live=False,
+                 **options: ValidatedWidget):
         if shortcut and len(shortcut) != 1 and shortcut.isalpha():
             raise ValueError("Expected a shortcut character that is in the alphabet")
+        if name is None:
+            name = cls.__name__
         super().__init__()
         layout = widgets.QHBoxLayout()
+        self._cls = cls
         self.setLayout(layout)
         self._enabled = LabelledWidget(name, widgets.QRadioButton(f"&{(shortcut or name[0]).upper()}"),
                                        LabelOrder.PREFIX)
@@ -212,6 +218,9 @@ class ScanPattern(widgets.QWidget):
         """
         return self._enabled.label.text()
 
+    def pattern(self) -> typing.Type[Design]:
+        return self._cls
+
     def on_update(self, action: typing.Callable[[], None]):
         self._update.clicked.connect(action)
 
@@ -250,7 +259,8 @@ class PALFunction(widgets.QWidget):
     toggled = core.pyqtSignal(bool)
     parameterChanged = core.pyqtSignal(str, object)
 
-    def __init__(self, name: str, enabled=False, **params: ValidatedWidget):
+    def __init__(self, name: str, failure: typing.Callable[[Exception], None], enabled=False,
+                 **params: ValidatedWidget):
         open_ = widgets.QLabel("(")
         close = widgets.QLabel(")")
         super().__init__()
@@ -261,7 +271,11 @@ class PALFunction(widgets.QWidget):
         if enabled:
             self._enabled.setCheckState(enums.Checked)
         self._name = widgets.QLabel(name)
-        self._params = tuple(LabelledWidget(f"{n} =", params[n], LabelOrder.PREFIX) for n in params)
+        lab_params = []
+        for n in params:
+            lab_params.append(LabelledWidget(f"{n} =", params[n], LabelOrder.PREFIX))
+            params[n].dataFailed.connect(failure)
+        self._params = tuple(lab_params)
         for widget in (self._enabled, self._name, open_, *self._params, close):
             layout.addWidget(widget)
         for name, wid in params.items():
@@ -288,6 +302,9 @@ class PALFunction(widgets.QWidget):
             The name on the label of the item.
         """
         return self._name.text()
+
+    def params(self, getter: typing.Callable[[widgets.QWidget], object]) -> str:
+        return ", ".join(map(str, map(getter, self._params)))
 
     def to_dict(self) -> _dict[str, widgets.QWidget]:
         """

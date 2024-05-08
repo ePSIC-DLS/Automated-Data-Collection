@@ -63,6 +63,8 @@ class TranslateRegion(ShortCorrectionPage):
         self._shift = utils.SizeControl(0, 1, validation.examples.any_int)
         if not microscope.ONLINE:
             self._layout.addWidget(self._shift, 0, 2)
+        self._outputs = utils.Subplot(1, 3, survey_size, survey_size, survey_size, title="ref | new | correlation")
+        self._o_size = survey_size
         self.setLayout(self._layout)
 
     def scans_increased(self):
@@ -78,6 +80,16 @@ class TranslateRegion(ShortCorrectionPage):
 
     def query(self):
         self._amount.check()
+
+    def close(self):
+        self._outputs.close()
+        super().close()
+
+    def open_all(self):
+        if self._outputs.isVisible():
+            self._outputs.raise_()
+        else:
+            self._outputs.show()
 
     @utils.Tracked
     def run(self):
@@ -123,11 +135,22 @@ class TranslateRegion(ShortCorrectionPage):
 
         ref_mask = self._window(reference.image().astype(np.float64))
         new_mask = self._window(new.image().astype(np.float64))
-
         correlation = convolve(ref_mask, new_mask[::-1, ::-1], mode="same")
+
+        for cnv, img in zip(self._outputs, (ref_mask, new_mask, correlation)):
+            img_pos = np.abs(np.min(img)) + img
+            img_norm = (img_pos / np.max(img_pos)) * 255
+            img_dis = images.GreyImage(img_norm.astype(np.uint32))
+            cnv.resize_canvas(img_dis.size)
+            cnv.draw(img_dis)
+
         # View cross correlation gives me for too large shifts - error when not valid
         peak = np.array(np.unravel_index(np.argmax(correlation), correlation.shape))
         correction = np.ceil([y_size / 2, x_size / 2]).astype(np.int_) - peak
+
+        self._outputs.title(f"{peak = }", " @ ")
+        self.open_all()
+
         self.drift.emit(correction[1], correction[0])
 
         self.runEnd.emit()

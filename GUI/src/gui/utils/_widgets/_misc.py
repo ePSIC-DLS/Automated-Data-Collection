@@ -389,8 +389,7 @@ class Canvas(widgets.QWidget):
         blank = RGBImage.blank(image.size)
         greys = np.arange(0, 256, step, dtype=np.uint8)
         counts, _ = np.histogram(data, bins=greys)
-        counts = np.log(counts)
-        counts[np.isneginf(counts)] = 0
+        counts[np.nonzero(counts)] = np.log(counts[np.nonzero(counts)])
         largest = np.max(counts)
         heights = ((counts / largest) * (h - 1)).astype(np.int_)
         adj_step = w // counts.size

@@ -1,8 +1,10 @@
 import typing
-from typing import Tuple as _tuple
+from typing import Tuple as _tuple, List as _list
 
 from .. import corrections
 from ..._base import Page, widgets, microscope, utils
+from ....language import vals
+from ....images import GreyImage
 
 
 class Corrections(typing.TypedDict):
@@ -14,14 +16,15 @@ class Corrections(typing.TypedDict):
 class Manager(Page):
 
     def __init__(self, failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
-                 scanner: microscope.Scanner, survey_size: _tuple[int, int]):
+                 scanner: microscope.Scanner, survey_size: _tuple[int, int],
+                 scanning: typing.Callable[[microscope.ScanType, bool], GreyImage]):
         super().__init__()
         self._master = widgets.QTabWidget()
         self._master.setUsesScrollButtons(False)
         self._master.setTabShape(self._master.Triangular)
         c1 = corrections.AutoFocus(failure_action, mic, scanner)
         c2 = corrections.Flash(failure_action, mic)
-        c3 = corrections.TranslateRegion(failure_action, mic, scanner, survey_size)
+        c3 = corrections.TranslateRegion(failure_action, mic, scanner, scanning, survey_size)
         self._corrections: Corrections = {"focus": c1, "emission": c2, "drift": c3}
         self._master.addTab(c1, "&Focus")
         self._master.addTab(c2, "&Emission")
@@ -50,9 +53,13 @@ class Manager(Page):
     def add_tooltip(self, i: int, tooltip: str):
         self._master.setTabToolTip(i, tooltip)
 
-    def run_now(self, _, correction: typing.Literal["focus", "emission", "drift"]):
+    def run_now(self, argc: vals.Number, argv: _list[vals.Value]):
+        if argc != 1:
+            raise TypeError(f"Expected 1 argument, got {argc}")
+        correction = argv[0].raw
         if correction not in self._corrections:
             raise ValueError(f"{correction!r} not recognised as a valid correction")
+        correction = typing.cast(typing.Literal["focus", "emission", "drift"], correction)
         self._corrections[correction].run()
 
     def compile(self) -> str:
@@ -63,6 +70,11 @@ class Manager(Page):
 
     def clear(self):
         pass
+
+    def close(self):
+        for correction in self._corrections.values():
+            correction.close()
+        super().close()
 
     def start(self):
         super().start()

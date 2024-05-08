@@ -4,17 +4,18 @@ from typing import List as _list, Tuple as _tuple
 from PyQt5.QtCore import Qt as enums
 
 from ... import utils
-from ..._base import ClusterPage, SettingsPage, widgets, gui, images
+from ..._base import ClusterPage, SettingsPage, widgets, gui, images, core
 from ..._errors import *
 
-from ....microscope import Scanner, Microscope, ONLINE, FullScan
+from ....microscope import ScanType, ONLINE, FullScan, Scanner
 
 
 class SurveyImage(ClusterPage, SettingsPage):
     settingChanged = SettingsPage.settingChanged
-    SIZES = (128, 256, 512, 1024)
+    driftRegion = core.pyqtSignal(tuple, tuple)
 
-    def __init__(self, size: int, cluster_colour: images.RGB, initial_size: int, link: Microscope, scanner: Scanner):
+    def __init__(self, size: int, cluster_colour: images.RGB, initial_size: int, scanner: Scanner,
+                 scan_func: typing.Callable[[ScanType, bool], images.GreyImage]):
         def _reset(new: enums.CheckState):
             if new == enums.Unchecked and self._original_image is not None:
                 self._polygon.clear()
@@ -30,14 +31,29 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._polygon: _list[_tuple[int, int]] = []
         self._polygon_mode = utils.LabelledWidget("ROI Drawing Mode", widgets.QCheckBox("&R"), utils.LabelOrder.SUFFIX)
         self._polygon_mode.focus.stateChanged.connect(_reset)
+
+        self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(8, 16, 32, 64),
+                                                utils.LabelOrder.SUFFIX)
+        self._export = widgets.QPushButton("Export region")
+        self._co_ords: _tuple[int, int, int, int] = (0, 0, 0, 0)
+        self._export.clicked.connect(lambda: self._region_export())
+
         self._regular.addWidget(self._polygon_mode)
+        self._regular.addWidget(self._drift_size)
+        self._regular.addWidget(self._export)
 
         self._canvas.mousePressed.connect(self._click)
 
         self.setLayout(self._layout)
 
-        self._mic = link
         self._scanner = scanner
+        self._scan = scan_func
+
+    @utils.Tracked
+    def _region_export(self):
+        if all(c == 0 for c in self._co_ords):
+            raise StagingError("Exporting Region", "Creating Region")
+        self.driftRegion.emit(self._co_ords[:2], self._co_ords[2:])
 
     def compile(self) -> str:
         return ""
@@ -47,15 +63,11 @@ class SurveyImage(ClusterPage, SettingsPage):
             return
         self.runStart.emit()
         if ONLINE:
-            self._scanner.scan_area = FullScan(self._canvas.image_size)
-            self._scanner.dwell_time = 15e-6
-            with self._mic.subsystems["Deflectors"].switch_blanked(False):
-                with self._mic.subsystems["Detectors"].switch_inserted(True):
-                    self._modified_image = self._scanner.scan().promote()
+            region = FullScan(self._canvas.image_size)
+            self._scanner.scan_area = region
+            self._modified_image = self._scan(region, True).promote()
         else:
-            self._modified_image = images.RGBImage.from_file(
-                r"C:\Users\fmz84311\OneDrive - Diamond Light Source Ltd\Documents\Project\Collection\assets\img_3.bmp"
-            )
+            self._modified_image = images.RGBImage.from_file("./assets/img_3.bmp")
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
         self.runEnd.emit()
@@ -88,12 +100,24 @@ class SurveyImage(ClusterPage, SettingsPage):
     def _click(self, event: gui.QMouseEvent):
         if self._state != utils.StoppableStatus.ACTIVE:
             return
-        elif not self._polygon_mode.focus.isChecked():
-            return
         elif self._modified_image is None:
-            raise StagingError("cluster drawing", "image scanning")
+            raise StagingError("drawing", "image scanning")
         btn = event.button()
         pos = event.pos()
+        if not self._polygon_mode.focus.isChecked():
+            self._modified_image = self._original_image.copy()
+            x, y = pos.x(), pos.y()
+            size = self._drift_size.focus.get_data()
+            left, top = x - size // 2, y - size // 2
+            right, bottom = x + size // 2, y + size // 2
+            try:
+                self._modified_image.drawing.rect.from_corners(
+                    (left, top), (right, bottom), self._cluster_colour, fill=None)
+            except IndexError as err:
+                raise GUIError(utils.ErrorSeverity.WARNING, "Drift Region Error", str(err))
+            self._canvas.draw(self._modified_image)
+            self._co_ords = (left, top, right, bottom)
+            return
         if btn == enums.LeftButton:
             self._polygon.append((pos.x(), pos.y()))
         else:
@@ -120,12 +144,12 @@ class SurveyImage(ClusterPage, SettingsPage):
     def help(self) -> str:
         s = """This is the survey image - it represents an initial image to threshold and segment.
         On the survey image, arbitrary polygons can be made and managed in the cluster manager
-        
+
         Settings
         --------
         ROI Drawing Mode
             No validation.
-            
+
             Enables the Region Of Interest Drawing Mode, where left-clicking the canvas will create a vertex, and
             right-clicking will complete the ROI polygon."""
         return s

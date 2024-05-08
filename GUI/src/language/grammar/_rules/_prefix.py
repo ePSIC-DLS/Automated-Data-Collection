@@ -1,14 +1,14 @@
 import abc as _abc
-from typing import TypeVar as _GenVar, Generic as _Gen, Tuple as _tuple, List as _list
+from typing import Generic as _Gen, TypeVar as _GenVar, Type as _type
 
 from ._utils import *
-from .. import _tokens as _t, _nodes as _n
+from .. import _tokens as _t, OpCodes as _Byte
+from ...utils import vals as _v
 
 _T = _GenVar("_T", bound=_t.Token)
-_E = _GenVar("_E", bound=_n.Expr)
 
 
-class PrefixRule(_Gen[_E, _T], _abc.ABC):
+class PrefixRule(_Gen[_T], _abc.ABC):
     """
     Abstract base class for all rules that happen at the start of parsing.
 
@@ -25,7 +25,7 @@ class PrefixRule(_Gen[_E, _T], _abc.ABC):
     """
 
     @_abc.abstractmethod
-    def parse(self, parser: Consumer, token: _T) -> _E:
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         """
         Parse this particular rule into a valid expression.
 
@@ -55,37 +55,7 @@ class PrefixRule(_Gen[_E, _T], _abc.ABC):
         return Precedence.PREFIX
 
 
-class VariableRule(PrefixRule[_n.VariableExpr, _t.IdentifierToken]):
-    """
-    Concrete rule for parsing variable names.
-
-    Bound Generics
-    --------------
-    _E: VariableExpr
-
-    _T: IdentifierToken
-    """
-
-    def parse(self, parser: Consumer, token: _t.IdentifierToken) -> _n.VariableExpr:
-        return _n.VariableExpr(token)
-
-
-class KeywordRule(PrefixRule[_n.KeywordExpr, _t.KeywordToken]):
-    """
-    Concrete rule for parsing keyword expressions.
-
-    Bound Generics
-    --------------
-    _E: KeywordExpr
-
-    _T: KeywordToken
-    """
-
-    def parse(self, parser: Consumer, token: _t.KeywordToken) -> _n.KeywordExpr:
-        return _n.KeywordExpr(token)
-
-
-class NumberRule(PrefixRule[_n.NumberExpr, _t.BaseNumToken]):
+class NumberRule(PrefixRule[_t.BaseNumToken]):
     """
     Concrete rule for parsing number literals in any base.
 
@@ -96,82 +66,11 @@ class NumberRule(PrefixRule[_n.NumberExpr, _t.BaseNumToken]):
     _T: BaseNumToken
     """
 
-    def parse(self, parser: Consumer, token: _t.BaseNumToken) -> _n.NumberExpr:
-        return _n.NumberExpr(token)
+    def parse(self, parser: Consumer, token: _t.BaseNumToken, allowed_assignment: bool):
+        parser.emit(_Byte.CONSTANT, parser.chunk.add(_v.Number(token.value)))
 
 
-class StringRule(PrefixRule[_n.StringExpr, _t.StringToken]):
-    """
-    Concrete rule for parsing string literals.
-
-    Bound Generics
-    --------------
-    _E: StringExpr
-
-    _T: StringToken
-    """
-
-    def parse(self, parser: Consumer, token: _t.StringToken) -> _n.StringExpr:
-        return _n.StringExpr(token)
-
-
-class PathRule(PrefixRule[_n.PathExpr, _t.PathToken]):
-    """
-    Concrete rule for parsing path literals.
-
-    Bound Generics
-    --------------
-    _E: PathExpr
-
-    _T: PathToken
-    """
-
-    def parse(self, parser: Consumer, token: _t.PathToken) -> _n.PathExpr:
-        return _n.PathExpr(token)
-
-
-class ListRule(PrefixRule[_n.CollectionExpr, _t.Token]):
-    """
-    Concrete rule for parsing collection literals.
-
-    Bound Generics
-    --------------
-    _E: CollectionExpr
-
-    _T: Token
-    """
-
-    def parse(self, parser: Consumer, token: _t.Token) -> _n.CollectionExpr:
-        return _n.CollectionExpr(token, *self.group(parser, _t.TokenType.END_LIST, "Array elements"))
-
-    @staticmethod
-    def group(parser: Consumer, end: _t.TokenType, context: str) -> _list[_n.Expr]:
-        """
-        Method that actually parses individual elements.
-
-        Parameters
-        ----------
-        parser: Consumer
-            The consumer that can parse tokens.
-        end: TokenType
-            The token that should be parsed to indicate the end of parsing.
-        context: str
-            The expression context.
-
-        Returns
-        -------
-        list[Expr]
-            The expressions parsed.
-        """
-        items = []
-        while not parser.match(end):
-            items.append(parser.expr())
-            if not parser.check(end):
-                parser.consume(_t.TokenType.SEPARATE, f"Expected {{lookup}} between {context}")
-        return items
-
-
-class UnaryOperatorRule(PrefixRule[_n.UnaryExpr, _t.Token]):
+class UnaryOperatorRule(PrefixRule[_t.Token]):
     """
     Concrete rule for parsing any unary operator.
 
@@ -182,11 +81,15 @@ class UnaryOperatorRule(PrefixRule[_n.UnaryExpr, _t.Token]):
     _T: Token
     """
 
-    def parse(self, parser: Consumer, token: _t.Token) -> _n.UnaryExpr:
-        return _n.UnaryExpr(token, parser.expr(self.get_precedence()))
+    def parse(self, parser: Consumer, token: _t.Token, allowed_assignment: bool):
+        parser.expr(self.get_precedence())
+        if token.token_type == _t.TokenType.NEG:
+            parser.emit(_Byte.NEGATE)
+        elif token.token_type == _t.TokenType.INV:
+            parser.emit(_Byte.INVERT)
 
 
-class GroupRule(PrefixRule[_n.GroupExpr, _t.Token]):
+class GroupRule(PrefixRule[_t.Token]):
     """
     Concrete rule for parsing a grouped expression.
 
@@ -197,10 +100,77 @@ class GroupRule(PrefixRule[_n.GroupExpr, _t.Token]):
     _T: Token
     """
 
-    def parse(self, parser: Consumer, token: _t.Token) -> _n.GroupExpr:
-        group = _n.GroupExpr(token, parser.expr())
-        parser.consume(_t.TokenType.END_CALL, "Expected {lookup} to end grouping")
-        return group
+    def parse(self, parser: Consumer, token: _t.Token, allowed_assignment: bool):
+        parser.expr()
+        parser.consume_type(_t.TokenType.END_CALL, "Expected {lookup} to end grouping")
 
-    def get_precedence(self) -> Precedence:
-        return Precedence.GROUP
+
+class KeywordRule(PrefixRule[_t.KeywordToken]):
+    """
+    Concrete rule for parsing a grouped expression.
+
+    Bound Generics
+    --------------
+    _E: GroupExpr
+
+    _T: Token
+    """
+
+    def parse(self, parser: Consumer, token: _t.KeywordToken, allowed_assignment: bool):
+        if token.keyword_type == _t.KeywordType.ON:
+            parser.emit(_Byte.TRUE)
+        elif token.keyword_type == _t.KeywordType.OFF:
+            parser.emit(_Byte.FALSE)
+        elif token.keyword_type == _t.KeywordType.NULL:
+            parser.emit(_Byte.NULL)
+
+
+class CharRule(PrefixRule[_t.StringToken]):
+
+    def __init__(self, cls: _type[_v.Value[str]]):
+        self._cls = cls
+
+    def parse(self, parser: Consumer, token: _t.Token, allowed_assignment: bool):
+        src = token.raw if isinstance(token, _t.StringToken) else token.src
+        parser.emit(_Byte.CONSTANT, parser.chunk.add(self._cls(src)))
+
+
+class VarRule(PrefixRule[_t.IdentifierToken]):
+
+    def parse(self, parser: Consumer, token: _t.IdentifierToken, allowed_assignment: bool):
+        self.parse_var(parser, token, allowed_assignment)
+
+    @classmethod
+    def parse_var(cls, parser: Consumer, token: _t.IdentifierToken, allowed_assignment: bool):
+        if (constant := cls.resolve(parser, token)) != -1:
+            get, set_ = _Byte.GET_LOCAL, _Byte.SET_LOCAL
+        else:
+            constant = parser.chunk.add(_v.String(token.src))
+            get, set_ = _Byte.GET_GLOBAL, _Byte.SET_GLOBAL
+        if allowed_assignment and parser.match(_t.TokenType.ASSIGN):
+            parser.expr()
+            code = set_
+        else:
+            code = get
+        parser.emit(code, constant)
+
+    @classmethod
+    def resolve(cls, parser: Consumer, token: _t.IdentifierToken) -> int:
+        for i, local in parser.compiler.iterate():
+            if local.name.src == token.src:
+                if local.depth == -1:
+                    parser.error("Cannot read local variable in its own initializer")
+                return i
+        return -1
+
+
+class ListRule(PrefixRule[_t.Token]):
+
+    def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
+        array = parser.chunk.add(_v.Array())
+        parser.emit(_Byte.CONSTANT, array)
+        while not parser.match(_t.TokenType.END_LIST):
+            parser.expr()
+            parser.emit(_Byte.DEF_ELEM, array)
+            if not parser.check(_t.TokenType.END_LIST):
+                parser.consume_type(_t.TokenType.SEPARATE, "Expected {lookup} between elements")
