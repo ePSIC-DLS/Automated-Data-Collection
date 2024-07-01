@@ -2,6 +2,8 @@ import functools
 import typing
 from typing import Dict as _dict, List as _list
 
+import numpy as np
+
 from ._01_survey import SurveyImage
 from ... import utils
 from ..._base import CanvasPage, images, SettingsPage
@@ -152,15 +154,12 @@ class Order(utils.SettingsPopup):
 
 class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
     settingChanged = SettingsPage.settingChanged
-    _modified_image: typing.Optional[images.GreyImage]
-    _original_image: typing.Optional[images.GreyImage]
 
     def __init__(self, size: int, previous: SurveyImage, failure_action: typing.Callable[[Exception], None]):
         CanvasPage.__init__(self, size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
                               advanced=functools.partial(Order, failure_action))
         self._prev = previous
-        self._draw_each = True
 
         def _minima() -> int:
             return int(self._minima.focus.get_data())
@@ -202,8 +201,8 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
 
         self.setLayout(self._layout)
 
-        self.settingChanged.connect(lambda _, __: self.run())
-        self._popup.settingChanged.connect(lambda _, __: self.run())
+        self.settingChanged.connect(lambda _, __: self.run() if self._prev.modified is not None else None)
+        self._popup.settingChanged.connect(lambda _, __: self.run() if self._prev.modified is not None else None)
 
     def compile(self) -> str:
         order = self._popup.widgets()["order"]
@@ -252,18 +251,18 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
             raise StagingError("any preprocessing", "scanning survey image")
         if self._modified_image is not None:
             return
-        self._modified_image = self._prev.original.demote("r")
+        self._modified_image = self._prev.original.copy()
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
 
     def _blur(self, use_params=False, width: int = None, height: int = None):
-        self._transform(lambda img, *args: img.transform.blur.reference(*args),
+        self._transform(lambda img, *args: img.transform.blur.basic.reference(*args),
                         lambda kwargs: ((kwargs["height"], kwargs["width"]),),
                         "blur", use_params, width=width, height=height)
 
     def _gss_blur(self, use_params=False, width: int = None, height: int = None, sigma_x: int = None,
                   sigma_y: int = None):
-        self._transform(lambda img, *args: img.transform.gaussian_blur.reference(*args),
+        self._transform(lambda img, *args: img.transform.blur.gaussian.reference(*args),
                         lambda kwargs: ((kwargs["height"], kwargs["width"]), (kwargs["sigma_x"], kwargs["sigma_y"])),
                         "gss_blur", use_params, width=width, height=height, sigma_x=sigma_x, sigma_y=sigma_y)
 
@@ -273,16 +272,16 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
                         "sharpen", use_params, size=size, scale=scale, delta=delta)
 
     def _median(self, use_params=False, size: int = None):
-        self._transform(lambda img, *args: img.transform.sharpen.reference(*args),
+        self._transform(lambda img, *args: img.transform.blur.median.reference(*args),
                         lambda kwargs: (kwargs["size"],),
                         "median", use_params, size=size)
 
     def _edge(self, use_params=False, size: int = None):
         def _edge(img: images.GreyImage, k_size: int):
-            img.greyscale_transform.edge_detection.reference(int(self._minima.focus.get_data()),
-                                                             int(self._maxima.focus.get_data()), k_size)
+            img.grey_transform.threshold.edge_detection.reference(int(self._minima.focus.get_data()),
+                                                                  int(self._maxima.focus.get_data()), k_size)
             if self._invert.focus.get_data():
-                img.image.reference()[:] = ~img.image()
+                img.data()[:] = ~img.data()
 
         self._transform(_edge,
                         lambda kwargs: (kwargs["size"],),
@@ -293,19 +292,19 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
             mi, ma = 0, 255
             if self._invert.focus.get_data():
                 mi, ma = ma, mi
-            img.greyscale_transform.region_threshold.reference(
-                images.ThresholdBehaviour("ext", mi), images.ThresholdBehaviour("ext", ma),
-                int(self._minima.focus.get_data()), int(self._maxima.focus.get_data())
+            img.grey_transform.threshold.region.reference(
+                images.External(int(self._minima.focus.get_data()), mi),
+                images.External(int(self._maxima.focus.get_data()), ma)
             )
 
         self._transform(_threshold,
                         lambda kwargs: (),
-                        "edge", use_params)
+                        "threshold", use_params)
 
     def _open(self, use_params=False, height: int = None, width: int = None, shape: int = None, multiplier: int = None,
               repeats: int = None):
         self._transform(
-            lambda img, *args: img.greyscale_transform.transform.reference(images.MorphologicalTransform.OPEN, *args),
+            lambda img, *args: img.grey_transform.open.reference(*args),
             lambda kwargs: (
                 (kwargs["height"], kwargs["width"]), kwargs["shape"], kwargs["multiplier"], kwargs["repeats"]),
             "open", use_params, height=height, width=width, shape=shape, multiplier=multiplier, repeats=repeats
@@ -314,7 +313,7 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
     def _close(self, use_params=False, height: int = None, width: int = None, shape: int = None, multiplier: int = None,
                repeats: int = None):
         self._transform(
-            lambda img, *args: img.greyscale_transform.transform.reference(images.MorphologicalTransform.CLOSE, *args),
+            lambda img, *args: img.grey_transform.close.reference(*args),
             lambda kwargs: (
                 (kwargs["height"], kwargs["width"]), kwargs["shape"], kwargs["multiplier"], kwargs["repeats"]),
             "close", use_params, height=height, width=width, shape=shape, multiplier=multiplier, repeats=repeats
@@ -323,8 +322,7 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
     def _gradient(self, use_params=False, height: int = None, width: int = None, shape: int = None,
                   multiplier: int = None, repeats: int = None):
         self._transform(
-            lambda img, *args: img.greyscale_transform.transform.reference(images.MorphologicalTransform.GRADIENT,
-                                                                           *args),
+            lambda img, *args: img.grey_transform.gradient.reference(*args),
             lambda kwargs: (
                 (kwargs["height"], kwargs["width"]), kwargs["shape"], kwargs["multiplier"], kwargs["repeats"]),
             "gradient", use_params, height=height, width=width, shape=shape, multiplier=multiplier, repeats=repeats
@@ -333,8 +331,7 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
     def _i_gradient(self, use_params=False, height: int = None, width: int = None, shape: int = None,
                     multiplier: int = None, repeats: int = None):
         self._transform(
-            lambda img, *args: img.greyscale_transform.transform.reference(images.MorphologicalTransform.WHITEHAT,
-                                                                           *args),
+            lambda img, *args: img.grey_transform.whitehat.reference(*args),
             lambda kwargs: (
                 (kwargs["height"], kwargs["width"]), kwargs["shape"], kwargs["multiplier"], kwargs["repeats"]),
             "i_gradient", use_params, height=height, width=width, shape=shape, multiplier=multiplier, repeats=repeats
@@ -343,8 +340,7 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
     def _e_gradient(self, use_params=False, height: int = None, width: int = None, shape: int = None,
                     multiplier: int = None, repeats: int = None):
         self._transform(
-            lambda img, *args: img.greyscale_transform.transform.reference(images.MorphologicalTransform.BLACKHAT,
-                                                                           *args),
+            lambda img, *args: img.grey_transform.blackhat.reference(*args),
             lambda kwargs: (
                 (kwargs["height"], kwargs["width"]), kwargs["shape"], kwargs["multiplier"], kwargs["repeats"]),
             "e_gradient", use_params, height=height, width=width, shape=shape, multiplier=multiplier, repeats=repeats
@@ -368,18 +364,13 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
             def _post():
                 pass
         self._make_modified()
-        if self._draw_each:
-            with self._canvas as img:
-                try:
-                    fn(img, *kwarg_arg_map({k: self.get_setting(f"{name}_{k.title()}") for k in kwargs}))
-                finally:
-                    _post()
-        else:
-            img = self._modified_image
-            try:
-                fn(img, *kwarg_arg_map({k: self.get_setting(f"{name}_{k.title()}") for k in kwargs}))
-            finally:
-                _post()
+        img = self._modified_image.demote().norm().dynamic()
+        try:
+            fn(img, *kwarg_arg_map({k: self.get_setting(f"{name}_{k.title()}") for k in kwargs}))
+        finally:
+            _post()
+        self._modified_image = img.promote()
+        self._canvas.draw(self._modified_image)
 
     def all_settings(self) -> typing.Iterator[str]:
         yield from ("minima", "maxima", "threshold_inversion")

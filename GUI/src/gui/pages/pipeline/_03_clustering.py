@@ -79,7 +79,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
     _newMax = core.pyqtSignal(int)
     _newVal = core.pyqtSignal(int)
 
-    def __init__(self, size: int, cluster_colour: images.RGB, initial_size: int, pipeline: ProcessingPipeline,
+    def __init__(self, size: int, cluster_colour: np.int_, initial_size: int, pipeline: ProcessingPipeline,
                  failure_action: typing.Callable[[Exception], None]):
         ClusterPage.__init__(self, size, cluster_colour, initial_size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
@@ -135,7 +135,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         ProcessPage.stop(self)
 
     def compile(self) -> str:
-        return "Cluster\nmark"
+        return "Cluster"
 
     # @utils.Tracked
     def chosen_cluster(self, radius: int) -> utils.Cluster:
@@ -173,8 +173,8 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         if (img := self._prev.modified) is None:
             raise StagingError("segmentation", "pre-processing")
         try:
-            img.downchannel(images.Grey(0), images.Grey(255))
-        except TypeError:
+            img.demote().norm().downchannel(0, 255)
+        except TypeError as err:
             raise GUIError(utils.ErrorSeverity.WARNING, "Incomplete processing",
                            "Pre-processing must end with a binary image. Try adding a 'threshold' or an 'edge' process")
         self._canvas.draw(images.RGBImage.blank(self._canvas.image_size))
@@ -186,8 +186,8 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
     @utils.Thread.decorate(manager=ProcessPage.MANAGER)
     @utils.Tracked
     def _run(self):
-        img = self._prev.modified
-        data = img.channel.copy("r")
+        img = self._prev.modified.demote()
+        data = img.norm().data()
 
         indices = np.nonzero(data == 255)
         white_mask = np.asarray(indices).T
@@ -231,16 +231,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
                 return x_size == size[0] and y_size == size[1]
             return x_size <= size[0] and y_size <= size[1]
 
-        cw, ch = self._canvas.image_size
-        clusters_img = np.zeros((ch, cw, 3), dtype=np.uint8)
-        by, bx = np.nonzero(self._DBSCAN_regions <= 255)
-        gy, gx = np.nonzero((self._DBSCAN_regions > 255) & (self._DBSCAN_regions <= 510))
-        ry, rx = np.nonzero(self._DBSCAN_regions > 510)
-        clusters_img[by, bx, 2] = self._DBSCAN_regions[by, bx]
-        clusters_img[gy, gx, 1] = self._DBSCAN_regions[gy, gx] - 255
-        clusters_img[ry, rx, 0] = self._DBSCAN_regions[ry, rx] - 510
-
-        all_clusters = images.RGBImage(clusters_img, data_order=images.RGBOrder.RGB)
+        all_clusters = images.RGBImage(self._DBSCAN_regions)
         self._cluster_image = all_clusters.copy()
 
         i = 0
@@ -257,20 +248,17 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
                 continue
             if blue == 0:
                 continue
-            blue_colour = images.RGB(0, 0, blue, wrapping=images.WrapMode.SPILL, order=images.RGBOrder.BGR)
-            if not _size(cluster := utils.Cluster(all_clusters.downchannel(images.Grey(0), blue_colour,
-                                                                           invalid_handler=images.BimodalBehaviour.BG),
-                                                  blue)
-                         ):
-                self._cluster_image.replace(blue_colour, images.Grey(0))
+            if not _size(cluster := utils.Cluster(all_clusters.downchannel(0, blue, invalid=images.ColourConvert.TO_BG),
+                                                  blue)):
+                self._cluster_image.replace(blue, 0)
                 self._progress.setMaximum(self._progress.maximum() - 1)
                 continue
             i += 1
             self._clusters.append(cluster)
             self.clusterFound.emit(i)
 
-        self._modified_image = self._cluster_image.downchannel(images.Grey(0), self._cluster_colour,
-                                                               invalid_handler=images.BimodalBehaviour.FG).upchannel()
+        self._modified_image = self._cluster_image.downchannel(0, self._cluster_colour,
+                                                               invalid=images.ColourConvert.TO_FG).upchannel()
         self._canvas.draw(self._modified_image)
         self.runEnd.emit()
 

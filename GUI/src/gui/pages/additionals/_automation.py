@@ -16,7 +16,8 @@ class Scripts(Page):
         def _output(content: str):
             self._output.append(content)
 
-        def _ready():
+        def _ready(path_: str):
+            self._run_file(path_)
             self._output.clear()
             self._progress.setValue(0)
             self._progress.setMaximum(0)
@@ -37,9 +38,8 @@ class Scripts(Page):
         self._layout.addWidget(self._output, 0, 0)
         self._layout.addWidget(self._prompt, 0, 1)
         self.setLayout(self._layout)
-        self._prompt.dialog().openFile.connect(self._run_file)
-        self._prompt.dialog().saveFile.connect(self._compile(compilation))
-        self._prompt.dialog().finished.connect(_ready)
+        self._prompt.dialog().openFile.connect(_ready)
+        self._prompt.dialog().saveFile.connect(self._write(compilation))
         self._path = ""
 
     def interpreter(self) -> language.Interpreter:
@@ -48,7 +48,7 @@ class Scripts(Page):
     def _run_file(self, path: str):
         self._path = path
 
-    def _compile(self, compilation: typing.Callable[[], str]) -> typing.Callable[[str], None]:
+    def _write(self, compilation: typing.Callable[[], str]) -> typing.Callable[[str], None]:
         def _inner(path: str):
             self._run_file(path)
             with open(path, "w") as script:
@@ -195,7 +195,7 @@ class Scripts(Page):
             ('"' <CHARACTER>* '"').
             A path is any character surrounded by single quotes; 
             (''' <CHARACTER>* '''). This differs from a string in that quotes remain in the resulting string.
-            A number is defined as expected. {self.L_NAME} does not support python's exp format;
+            A number is defined as expected. {self.L_NAME} does *not* support python's exp format;
             so 1e3 is interpreted as the number '1', followed by the variable 'e', followed by the number '3'.
             A hexadecimal number is defined using a preceding '\\x' marker and then any valid hexadecimal character;
             ('\\x'((0-9) | (A-F) | (a-f))+). This is evaluated to an integer.
@@ -382,49 +382,5 @@ class Scripts(Page):
         KernelShape {images.MorphologicalShape.__doc__}
         NumberMatch {utils.Match.__doc__}
         Axis {utils.Extreme.__doc__}
-        Staging {utils.Stages.__doc__}
-        
-        """
+        Staging {utils.Stages.__doc__}"""
         return s
-
-# class ScriptInterpreter(language.execution.Interpreter, core.QObject,
-#                         metaclass=utils.make_meta(core.QObject, language.execution.Interpreter)):
-#
-#     def __init__(self, variable_handler: typing.Callable[[str, object], None], variables: _dict[str, object],
-#                  keyword_handlers: _dict[language.grammar.KeywordType, typing.Callable[[], None]],
-#                  **functions: language.NativeFunction):
-#         core.QObject.__init__(self)
-#         language.execution.Interpreter.__init__(self)
-#         for k, v in functions.items():
-#             self._globals.set_at(k, v, create=True)
-#         for k, v in variables.items():
-#             self._globals.set_at(k, v, create=True)
-#         self._keys = keyword_handlers
-#         self._var = variable_handler
-#         self._failed: typing.Optional[Exception] = None
-#
-#     def fail(self, exc: Exception):
-#         self._failed = exc
-#
-#     def execute(self, *stream: language.grammar.Node):
-#         self._failed = None
-#         try:
-#             for node in stream:
-#                 if self._token is not None:
-#                     pos = self.position
-#                     yield int(pos[:pos.find(":")])
-#                 self.evaluate(node)
-#                 if self._failed:
-#                     raise self._failed
-#         except Exception as err:
-#             if isinstance(err, language.InterpretationError):
-#                 raise
-#             raise language.InterpretationError(self._token, str(err))
-#
-#     def visit_keyword_stmt(self, node: language.grammar.KeywordStmt) -> None:
-#         self._keys[node.keyword_type]()
-#
-#     def visit_set_expr(self, node: language.grammar.SetExpr) -> object:
-#         obj = super().visit_set_expr(node)
-#         self._var(node.sink.src.src, obj)
-#         return obj

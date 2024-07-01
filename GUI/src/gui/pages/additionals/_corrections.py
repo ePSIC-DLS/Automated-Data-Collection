@@ -78,6 +78,7 @@ class Manager(Page):
 
     def start(self):
         super().start()
+        self._child_visibility(utils.Corrections(15))
         self.setEnabled(True)
         for correction in self._corrections.values():
             correction.start()

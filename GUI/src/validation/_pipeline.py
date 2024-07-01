@@ -171,6 +171,9 @@ class Pipeline(ts.Base[Src, Dst], vs.Base[Dst], typing.Generic[Src, Dst]):
         mid = "; then ".join(map(str, self._pipe))
         return f"({mid})"
 
+    def __repr__(self) -> str:
+        return str(self._pipe)
+
     def __add__(self, other: "Pipeline[Dst,NDst]") -> "Pipeline[Src,NDst]":
         """
         Combines two pipelines together such that the steps of the other pipeline come after the steps from this one.

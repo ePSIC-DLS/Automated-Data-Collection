@@ -6,14 +6,14 @@ from PyQt5.QtCore import Qt as enums
 
 from ..pipeline import SurveyImage
 from ... import utils
-from ..._base import CanvasPage, SettingsPage, images, widgets, gui
+from ..._base import CanvasPage, gui, SettingsPage, widgets
 from .... import validation
 
 
 class Histogram(CanvasPage, SettingsPage):
     settingChanged = SettingsPage.settingChanged
 
-    def __init__(self, size: int, prev: SurveyImage, outline: images.Colour,
+    def __init__(self, size: int, prev: SurveyImage, outline: np.int_,
                  failure_action: typing.Callable[[Exception], None]):
         CanvasPage.__init__(self, size, movement_handler=self._drag)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
@@ -58,7 +58,7 @@ class Histogram(CanvasPage, SettingsPage):
         if self._src.original is None:
             return
         self._original_image = self._src.original.copy()
-        x_points, greys = self._canvas.histogram(self._original_image.demote("r"),
+        x_points, greys = self._canvas.histogram(self._original_image.demote(),
                                                  int(self._num_groups.focus.get_data()), self._colour)
         x_points[:-1] = x_points[1:]
         x_points[-1] = self._canvas.image_size[0]
@@ -99,7 +99,7 @@ class Histogram(CanvasPage, SettingsPage):
             self.settingChanged.emit("minima", self._min_val)
         x_pos = int((self._min_val / 255) * (self._canvas.image_size[0] - 1))
         with self._canvas as img:
-            img.drawing.line((x_pos, 0), (x_pos, self._canvas.image_size[1] - 1), images.RGB(255, 0, 0))
+            img.drawings.line((x_pos, 0), (x_pos, self._canvas.image_size[1] - 1), 0xFF0000)
         self._minima.setText(f"Minima: {self._min_val}")
 
     def _max_line(self, emit=True):
@@ -108,7 +108,7 @@ class Histogram(CanvasPage, SettingsPage):
             self.settingChanged.emit("maxima", self._max_val)
         x_pos = int((self._max_val / 255) * (self._canvas.image_size[0] - 1))
         with self._canvas as img:
-            img.drawing.line((x_pos, 0), (x_pos, self._canvas.image_size[1] - 1), images.RGB(0, 0, 255))
+            img.drawings.line((x_pos, 0), (x_pos, self._canvas.image_size[1] - 1), 0x0000FF)
         self._maxima.setText(f"Maxima: {self._max_val}")
 
     def _drag(self, event: gui.QMouseEvent):
@@ -138,18 +138,17 @@ class Histogram(CanvasPage, SettingsPage):
             self._max_line()
 
     def _process_tooltip(self, x: int, y: int) -> typing.Iterator[str]:
-        def _handle(colour: images.Grey) -> str:
+        def _handle(colour: int) -> str:
             if self._display_type == utils.ColourDisplay.HEX:
-                clr = str(colour)
-            elif self._display_type == utils.ColourDisplay.RGB:
-                clr = str(colour.items())
+                clr = f"#{colour:06x}"
             else:
-                clr = "white" if colour["r"] == 255 else ("black" if colour["r"] == 0 else "grey")
+                hexa = f"{colour:06x}"
+                clr = str((int(hexa[0:2], 16), int(hexa[2:4], 16), int(hexa[4:6], 16)))
             return clr
 
         for lim in self._greys:
             if x <= lim:
-                start, end = map(_handle, map(images.Grey, self._greys[lim]))
+                start, end = map(_handle, self._greys[lim])
                 break
         else:
             raise RuntimeError("Can't get here")

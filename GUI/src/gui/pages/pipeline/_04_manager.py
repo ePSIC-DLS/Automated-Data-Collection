@@ -92,7 +92,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._canvas.mousePressed.connect(self._click)
 
     def compile(self) -> str:
-        return "tighten"
+        return "mark\ntighten"
 
     def run(self):
         pass
@@ -159,7 +159,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
 
     def _draw(self):
         self._modified_image = self._selected.modified.copy()
-        colour = ~self._selected.colour()
+        colour = 2 ** 24 - 1 - self._selected.colour()
         for grid_set in self._clusters.values():
             for grid in grid_set:
                 grid.draw(self._modified_image, colour)
@@ -234,8 +234,8 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
             # noinspection PyCallingNonCallable
             self._update_cluster(x, y)
 
-    @utils.Tracked
     @utils.Thread.decorate(manager=ProcessPage.MANAGER)
+    @utils.Tracked
     def _mark(self, x: int, y: int):
         pitch, overlap, overlaps = self._settings()
         for cluster in self._order:

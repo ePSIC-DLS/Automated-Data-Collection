@@ -1,6 +1,7 @@
 import typing
 from typing import List as _list, Tuple as _tuple
 
+import numpy as np
 from PyQt5.QtCore import Qt as enums
 
 from ... import utils
@@ -14,7 +15,7 @@ class SurveyImage(ClusterPage, SettingsPage):
     settingChanged = SettingsPage.settingChanged
     driftRegion = core.pyqtSignal(tuple, tuple)
 
-    def __init__(self, size: int, cluster_colour: images.RGB, initial_size: int, scanner: Scanner,
+    def __init__(self, size: int, cluster_colour: np.int_, initial_size: int, scanner: Scanner,
                  scan_func: typing.Callable[[ScanType, bool], images.GreyImage]):
         def _reset(new: enums.CheckState):
             if new == enums.Unchecked and self._original_image is not None:
@@ -56,7 +57,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         self.driftRegion.emit(self._co_ords[:2], self._co_ords[2:])
 
     def compile(self) -> str:
-        return ""
+        return "Scan"
 
     def run(self):
         if self._state != utils.StoppableStatus.ACTIVE:
@@ -67,7 +68,7 @@ class SurveyImage(ClusterPage, SettingsPage):
             self._scanner.scan_area = region
             self._modified_image = self._scan(region, True).promote()
         else:
-            self._modified_image = images.RGBImage.from_file("./assets/img_3.bmp")
+            self._modified_image = images.RGBImage.from_file("./assets/img_3.bmp", do_static=True)
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
         self.runEnd.emit()
@@ -91,7 +92,7 @@ class SurveyImage(ClusterPage, SettingsPage):
             self._cluster_image = self._modified_image.copy()
             pos = event.pos()
             x, y = pos.x(), pos.y()
-            self._cluster_image.drawing.line(self._polygon[-1], (x, y), self._cluster_colour)
+            self._cluster_image.drawings.line(self._polygon[-1], (x, y), self._cluster_colour)
             self._canvas.draw(self._cluster_image)
         else:
             self._tooltip(event)
@@ -111,7 +112,7 @@ class SurveyImage(ClusterPage, SettingsPage):
             left, top = x - size // 2, y - size // 2
             right, bottom = x + size // 2, y + size // 2
             try:
-                self._modified_image.drawing.rect.from_corners(
+                self._modified_image.drawings.rect.from_corners(
                     (left, top), (right, bottom), self._cluster_colour, fill=None)
             except IndexError as err:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Drift Region Error", str(err))
@@ -130,7 +131,7 @@ class SurveyImage(ClusterPage, SettingsPage):
                                "Need at least 3 vertices to form a polygon")
             self._cluster_image = self._modified_image.copy()
             if self._polygon[-1] != self._polygon[0]:
-                self._cluster_image.drawing.line(self._polygon[-1], self._polygon[0], self._cluster_colour)
+                self._cluster_image.drawings.line(self._polygon[-1], self._polygon[0], self._cluster_colour)
             self._clusters.append(cluster)
             self._polygon.clear()
             self._canvas.draw(self._cluster_image)

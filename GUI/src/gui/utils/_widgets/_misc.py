@@ -5,7 +5,7 @@ from typing import Dict as _dict, Tuple as _tuple
 import numpy as np
 from PyQt5 import QtWidgets as widgets, QtCore as core, QtGui as gui
 
-from ....images import RGBOrder, RGBImage, GreyImage, AABBCorner, RGB, Grey
+from ....images import RGBImage, GreyImage, AABBCorner
 
 __all__ = ["FileDialog", "FilePrompt", "Canvas", "Subplot"]
 
@@ -347,7 +347,9 @@ class Canvas(widgets.QWidget):
         """
         if image.size != self._size:
             raise ValueError(f"Expected image size and widget size to match! (got {image.size} and {self._size})")
-        self._image = image
+        elif not isinstance(image, RGBImage):
+            raise TypeError("Expected a full-colour image")
+        self._image = image.static(0, 2 ** 24 - 1)
         self.update()
 
     def update(self):
@@ -355,15 +357,15 @@ class Canvas(widgets.QWidget):
         Updates the widget's display. This is called internally whenever the image is changed.
         """
         if self._image is not None:
-            data = self._image.get_channels(RGBOrder.RGB).astype(np.uint32)
+            data = self._image.norm().convert(np.uint32)
             w, h = self._image.size
-            self._data = (255 << 24 | data[:, :, 0] << 16 | data[:, :, 1] << 8 | data[:, :, 2]).flatten()
+            self._data = (255 << 24 | data).flatten()
             # noinspection PyTypeChecker
             qt_image = gui.QImage(self._data, w, h, gui.QImage.Format_RGB32)
             self._pixels = gui.QPixmap.fromImage(qt_image)
         super().update()
 
-    def histogram(self, image: GreyImage, groups=15, colour=RGB(0, 0, 255)) -> _tuple[np.ndarray, np.ndarray]:
+    def histogram(self, image: GreyImage, groups=15, colour: np.int_ = 0x0000FF) -> _tuple[np.ndarray, np.ndarray]:
         """
         Calculates the histogram of the specified image.
 
@@ -384,9 +386,9 @@ class Canvas(widgets.QWidget):
             The bottom left x position of each rectangle, and the greyscale colours used.
         """
         step = 255 // groups
-        data = image.image()
+        data = image.norm().convert(np.uint8)
         w, h = image.size
-        blank = RGBImage.blank(image.size)
+        blank = RGBImage.blank(image.size, static_range=(0, 2 ** 24 - 1))
         greys = np.arange(0, 256, step, dtype=np.uint8)
         counts, _ = np.histogram(data, bins=greys)
         counts[np.nonzero(counts)] = np.log(counts[np.nonzero(counts)])
@@ -397,9 +399,10 @@ class Canvas(widgets.QWidget):
         for grey, x, height in zip(greys, (xs := np.arange(0, w - rect_width, rect_width)), heights):
             if height == 0:
                 continue
-            blank.drawing.rect.from_size((x, w - 1, AABBCorner.BOTTOM_LEFT), (rect_width, height), colour,
-                                         fill=Grey(grey))
-        blank.drawing.line((0, h - 1), (w - 1, h - 1), colour)
+            fill_colour = (grey << 16) | (grey << 8) | grey
+            blank.drawings.rect.size((x, w - 1), (rect_width, height), colour, fill=fill_colour,
+                                     position=AABBCorner.BOTTOM_LEFT)
+        blank.drawings.line((0, h - 1), (w - 1, h - 1), colour)
         self.draw(blank)
         return xs, greys
 

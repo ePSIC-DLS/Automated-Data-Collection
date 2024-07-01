@@ -138,12 +138,12 @@ class GridSettings(utils.SettingsPopup):
 
 class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     settingChanged = SettingsPage.settingChanged
-    clusterScanned = core.pyqtSignal(int)
     scanPerformed = core.pyqtSignal()
+    _clusterScanned = core.pyqtSignal(int)
     _newVal = core.pyqtSignal(int)
     SIZES = (64, 128, 256, 512)
 
-    def __init__(self, size: int, grids: Management, image: SurveyImage, marker: images.RGB,
+    def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_,
                  failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
                  scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline):
         DeepSearch.SIZES = tuple(s for s in DeepSearch.SIZES if s < size)
@@ -156,16 +156,16 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             err = "Cannot add clustered image to save file when clustering has not been performed"
             if clusters.modified is None:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Specified Null Step", err)
-            return clusters.modified.image.reference()
+            return clusters.modified.data.reference()
 
         def _pipeline_image() -> np.ndarray:
             err = "Cannot add processed image to save file when clustering has not been performed"
             if pipeline.modified is None:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Specified Null Step", err)
-            return pipeline.modified.image.reference()
+            return pipeline.modified.data.reference()
 
         def _survey_image() -> np.ndarray:
-            return image.modified.image.reference()
+            return image.modified.data.reference()
 
         self._colour_option.hide()
         self._regions: _tuple[utils.ScanRegion, ...] = ()
@@ -196,7 +196,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._progress.setRange(0, 0)
         self._progress.setValue(0)
         self._progress.setFormat("%v/%m steps complete (%p%)")
-        self.clusterScanned.connect(self._progress.setValue)
+        self._clusterScanned.connect(self._progress.setValue)
         self._newVal.connect(self._progress.setValue)
 
         self._regular.addWidget(self._scan_mode)
@@ -238,7 +238,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             print(msg)
         else:
             self._logger.debug(msg)
-        lim = self._canvas.image_size[0]
+        lim = self._canvas.data_size[0]
         for grid in self._regions:
             grid.move((x_shift, y_shift))
             grid.disabled = (any(c < 0 for c in grid[Corners.TOP_LEFT]) or
@@ -255,7 +255,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._progress.setMaximum(len(self._regions))
         self._modified_image = self._image.original.copy()
         for grid in self._regions[self._i:]:
-            grid.draw(self._modified_image, ~self._marker)
+            grid.draw(self._modified_image, 2 ** 24 - 1 - self._marker)
         self._canvas.draw(self._modified_image)
         self._original_image = self._modified_image.copy()
         if self._automate:
@@ -281,7 +281,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 clear.clear()
             with h5py.File(params, "a") as f:
                 if images_saved & utils.Stages.MARKER:
-                    f.create_dataset("Grid Marker", data=self._modified_image.image.reference())
+                    f.create_dataset("Grid Marker", data=self._modified_image.data.reference())
                 if images_saved & utils.Stages.CLUSTERS:
                     f.create_dataset("Clusters Found", data=self._clusters())
                 if images_saved & utils.Stages.PROCESSED:
@@ -348,8 +348,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             self._scanner.scan_area = microscope.FullScan((self._resolution, self._resolution))
             self._scanner.dwell_time = exposure  # add pattern
 
+        original = self._original_image.data()
         for i, region in enumerate(self._regions):
-            original = self._original_image.image()
+            original = self._original_image.data()
             self._i = i + 1
             if i < current:
                 continue
@@ -358,17 +359,17 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 return
             elif self._state == utils.StoppableStatus.DEAD:
                 with self._canvas as draw:
-                    draw.image.reference()[:, :, :] = original.copy()
+                    draw.data.reference()[:, :] = original.copy()
                 return
             elif region.disabled:
                 continue
 
             with self._canvas as draw:
-                draw.image.reference()[:, :, :] = original.copy()
+                draw.data.reference()[:, :] = original.copy()
                 region.draw(draw, self._marker, filled=True)
                 region.draw(self._original_image, self._marker)
                 if not microscope.ONLINE:
-                    time.sleep(1)
+                    time.sleep(0.5)
 
             if microscope.ONLINE:
                 with self._mic.subsystems["Detectors"].switch_inserted(False):
@@ -406,10 +407,10 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                                 _merlin_scan()
             if self._progress.isEnabled():
                 self.scanPerformed.emit()
-                self.clusterScanned.emit(i + 1)
+                self._clusterScanned.emit(i + 1)
 
         with self._canvas as draw:
-            draw.image.reference()[:, :, :] = original.copy()
+            draw.data.reference()[:, :] = original.copy()
         self.runEnd.emit()
 
     def automate(self):

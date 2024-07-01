@@ -11,6 +11,11 @@ from .... import images, validation
 from ..._errors import *
 
 
+# turn the 'raise_, show' code into a function of the settings page.
+# merge the QD variable change.
+# make it return an RGB image to increase chances of static data success.
+# potentially, make it so that it *tries* to make it static, but if that fails then it continues as normal.
+
 class TranslateRegion(ShortCorrectionPage):
     drift = core.pyqtSignal(int, int)
     SIZES = (256, 512, 1024, 2048, 4096, 8192, 16384)
@@ -115,13 +120,12 @@ class TranslateRegion(ShortCorrectionPage):
         size = self._region.size
         new = self._do_scan(x_shift, y_shift)
 
-        ref_mask = self._window(self._ref.image().astype(np.float64))
-        new_mask = self._window(new.image().astype(np.float64))
+        ref_mask = self._window(self._ref.convert(np.float64))
+        new_mask = self._window(new.convert(np.float64))
         correlation = convolve(ref_mask, new_mask[::-1, ::-1], mode="same")
 
         for cnv, arr in zip(self._outputs, (ref_mask, new_mask, correlation)):
-            arr_dis = arr + np.abs(np.min(arr))
-            img = images.GreyImage(((arr_dis / np.max(arr_dis)) * 255).astype(np.uint8))
+            img = images.RGBImage(arr)
             cnv.resize_canvas(img.size)
             cnv.draw(img)
         # shift exceeds FOV - bail

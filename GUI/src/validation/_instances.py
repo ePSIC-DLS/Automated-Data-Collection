@@ -11,6 +11,8 @@ any_int: Pipeline[Any, int]
     Converts its input to a float, checks it's a valid integer (has no decimal component), then converts it to an int.
 any_bool: Pipeline[Any, bool]
     Converts its input to a string, checks it's a correct boolean (true or false), then converts it to a bool.
+colours: Pipeline[Any, int]
+    Checks for an integer between 2 and 255.
 kernel: Pipeline[Any, int]
     Checks for an odd integer that is between 1 and 15.
 sigma: Pipeline[Any, int]
@@ -98,7 +100,7 @@ colours = any_int + Pipeline(
 
 kernel = any_int + Pipeline(
     Step(RangeValidator.known((1, 15)), desc="ensure the integer is between 1 and 15"),
-    Step(VInverseMixin(FactorValidator(2)), desc="ensure the integer is even"),
+    Step(VInverseMixin(FactorValidator(2)), desc="ensure the integer is odd"),
     in_type=int, out_type=int
 )
 sigma = any_int + Pipeline(

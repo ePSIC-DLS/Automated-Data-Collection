@@ -13,9 +13,31 @@ detector = validation.Pipeline.enum(Detector)
 
 
 class Controller(Base):
+    """
+    Concrete controller for the detectors in the microscope.
+
+    Keys
+    ----
+    current: Detector (enum validation)
+        The current detector being controlled.
+    inserted: bool (boolean validation)
+        The insertion status of the detector.
+    brightness: int (int12 validation)
+        The brightness of the detector.
+    contrast: int (int12 validation)
+        The contrast of the detector.
+    """
 
     @Key
     def current(self) -> Detector:
+        """
+        Public access to the current detector.
+
+        Returns
+        -------
+        Detector
+            The current detector being controlled.
+        """
         return self._current
 
     @current.setter
@@ -26,6 +48,14 @@ class Controller(Base):
 
     @Key
     def inserted(self) -> bool:
+        """
+        Public access to the detector state.
+
+        Returns
+        -------
+        bool
+            The insertion status of the detector.
+        """
         return bool(self._controller.GetPosition(self.current.value))
 
     @inserted.setter
@@ -35,6 +65,14 @@ class Controller(Base):
 
     @Key
     def brightness(self) -> int:
+        """
+        Public access to the detector's brightness.
+
+        Returns
+        -------
+        int
+            The brightness of the detector.
+        """
         return self._controller.GetBrt(self.current.value)
 
     @brightness.setter
@@ -44,6 +82,14 @@ class Controller(Base):
 
     @Key
     def contrast(self) -> int:
+        """
+        Public access to the detector's contrast.
+
+        Returns
+        -------
+        int
+            The contrast of the detector.
+        """
         return self._controller.GetCont(self.current.value)
 
     @contrast.setter

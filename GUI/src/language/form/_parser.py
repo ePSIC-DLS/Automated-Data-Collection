@@ -50,6 +50,7 @@ class Parser(rules.Consumer):
             tokens.TokenType.POW: rules.BinaryOperatorRule(rules.Precedence.EXPONENT),
             tokens.TokenType.NEG: rules.BinaryOperatorRule(rules.Precedence.TERM),
             tokens.TokenType.PLUS: rules.BinaryOperatorRule(rules.Precedence.TERM),
+            tokens.TokenType.COMBINE: rules.BinaryOperatorRule(rules.Precedence.TERM),
             tokens.TokenType.EQ: rules.BinaryOperatorRule(rules.Precedence.CMP),
             tokens.TokenType.NEQ: rules.BinaryOperatorRule(rules.Precedence.CMP),
             tokens.TokenType.LT: rules.BinaryOperatorRule(rules.Precedence.CMP),

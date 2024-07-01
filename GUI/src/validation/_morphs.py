@@ -291,8 +291,8 @@ class TypeTranslator(Base[typing.Any, Dst], typing.Generic[Dst]):
         """
         try:
             return self._cls(data)
-        except TypeError as err:
-            raise Error(f"{data!r} cannot be type-casted to {self._cls} due to {err!r}")
+        except Exception as err:
+            raise Error(f"{data!r} cannot be type-casted to {self._cls} due to {err!r}") from None
 
 
 class KeyTranslator(Base[typing.Mapping[Src, Dst], Dst], typing.Generic[Src, Dst]):
@@ -361,7 +361,7 @@ class KeyTranslator(Base[typing.Mapping[Src, Dst], Dst], typing.Generic[Src, Dst
         try:
             return data[self._key]
         except LookupError as err:
-            raise Error(f"{data} cannot find {self._key} due to {err!r}")
+            raise Error(f"{data} cannot find {self._key} due to {err!r}") from None
 
 
 class PropertyTranslator(Base[Src, Dst], typing.Generic[Src, Dst]):
@@ -426,7 +426,7 @@ class PropertyTranslator(Base[Src, Dst], typing.Generic[Src, Dst]):
         try:
             return getattr(data, self._attr)
         except AttributeError:
-            raise Error(f"{data!r} has no attribute {self._attr!r}")
+            raise Error(f"{data!r} has no attribute {self._attr!r}") from None
 
 
 class FStringTranslator(Base[str, str]):

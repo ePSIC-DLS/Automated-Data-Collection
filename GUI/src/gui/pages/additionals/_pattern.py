@@ -1,21 +1,20 @@
 import functools
-import itertools
 import typing
-from typing import Dict as _dict, Set as _set, Tuple as _tuple, List as _list, Optional as _None
+from typing import Dict as _dict, List as _list, Optional as _None
 
 import numpy as np
 
 from ... import utils
 from ..._base import CanvasPage, images, SettingsPage, widgets
 from .... import validation
-from ....language.utils import vals, objs
+from ....language.utils import objs, vals
 
 
 class ScanType(CanvasPage, SettingsPage):
     settingChanged = SettingsPage.settingChanged
     SIZES = (256, 512, 1024, 2048, 4096, 8192, 16384)
 
-    def __init__(self, size: int, pattern_colour: images.RGB, failure_action: typing.Callable[[Exception], None]):
+    def __init__(self, size: int, pattern_colour: np.int_, failure_action: typing.Callable[[Exception], None]):
         ScanType.SIZES = tuple(s for s in ScanType.SIZES if s > size)
         CanvasPage.__init__(self, size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
@@ -223,12 +222,8 @@ class ScanType(CanvasPage, SettingsPage):
         n_w, n_h = self._canvas.image_size
         img = np.repeat(img, n_h // o_h, axis=0)
         img = np.repeat(img, n_w // o_w, axis=1)
-        image = images.GreyImage(img).promote()
-        try:
-            image.replace(images.Grey(255), self._colour)
-        except ValueError:
-            pass
-        self._canvas.draw(image)
+        image = images.RGBImage(img.astype(np.int_)).downchannel(0, self._colour, invalid=images.ColourConvert.TO_FG)
+        self._canvas.draw(image.upchannel())
 
     def all_settings(self) -> typing.Iterator[str]:
         yield from ("scan_resolution", "selected")
@@ -244,7 +239,6 @@ class ScanType(CanvasPage, SettingsPage):
                     (utils.Raster, utils.Snake, utils.Spiral, utils.Grid, utils.Random),
                     (self._raster, self._snake, self._spiral, self._checkerboard, self._random)
             ):
-                pattern: utils.ScanPattern = pattern
                 if isinstance(value, cls):
                     self._selected = pattern
                     p_dict = pattern.to_dict()

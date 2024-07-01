@@ -210,6 +210,11 @@ class Interpreter(vals.Interpreter):
                     if (result := _binary("subtract", type(self.stack.peek(1)).sub,
                                           type(self.stack.peek()).r_sub)) is not None:
                         return result
+                elif code == OpCodes.MIX.value:
+                    # noinspection PyTypeChecker
+                    if (result := _binary("mix", type(self.stack.peek(1)).mix,
+                                          type(self.stack.peek()).r_mix)) is not None:
+                        return result
                 elif code == OpCodes.EQUAL.value:
                     # noinspection PyTypeChecker
                     if (result := _binary("equality", type(self.stack.peek(1)).equal,
@@ -321,8 +326,6 @@ class Interpreter(vals.Interpreter):
                 elif code == OpCodes.DEF_ELEM.value:
                     collection = _read_constant(vals.Array)
                     value = self.stack.pop()
-                    if not isinstance(collection, vals.Array):
-                        raise RuntimeError("Something Failed")
                     collection.add_elem(value)
                 else:
                     self._unknown(code)

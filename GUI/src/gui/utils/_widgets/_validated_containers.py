@@ -13,7 +13,7 @@ from .... import validation
 V = typing.TypeVar("V")
 VW = typing.TypeVar("VW", bound=ValidatedWidget)
 
-__all__ = ["XDControl", "SizeControl", "ScanPattern", "PALFunction", "ScanPatternGroup", "Counter"]
+__all__ = ["XDControl", "SizeControl", "ScanPattern", "PALFunction", "Counter"]
 
 
 class XDControl(ValidatedWidget, typing.Generic[VW]):
@@ -316,33 +316,6 @@ class PALFunction(widgets.QWidget):
             A mapping from widget name and parameter name to widget instance.
         """
         return {f"{self._name.text()}_{label.label.text()[:-2]}": label.focus for label in self._params}
-
-
-class ScanPatternGroup(widgets.QWidget):
-    newPattern = core.pyqtSignal(ScanPattern)
-    patternFailed = core.pyqtSignal(Exception)
-
-    def __init__(self, current: str, **patterns: ScanPattern):
-        super().__init__()
-        try:
-            self._current = patterns[current]
-        except KeyError:
-            raise ValueError(f"Expected current to be in patterns, got {current!r}")
-        self._patterns = {" ".join(k.split("_")).title(): v for k, v in patterns.items()}
-
-    def select(self, new: ScanPattern):
-        try:
-            if not isinstance(new, ScanPattern):
-                raise TypeError(f"Expected a ScanPattern, got {type(new)}")
-            if (name := new.name()) not in self._patterns:
-                raise ValueError(f"Expected name to be in patterns, got {name!r}")
-            self._current = new
-            self.newPattern.emit(new)
-        except Exception as err:
-            self.patternFailed.emit(err)
-
-    def chosen(self) -> ScanPattern:
-        return self._current
 
 
 class Counter(widgets.QWidget):

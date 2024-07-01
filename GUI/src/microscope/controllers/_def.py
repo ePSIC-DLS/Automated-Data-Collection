@@ -11,9 +11,27 @@ else:
 
 
 class Controller(Base):
+    """
+    Concrete controller for the microscope deflector.
+
+    Keys
+    ----
+    value: tuple[int, int] (int16 validation on each element)
+        The PLA deflector value.
+    blanked: bool (boolean validation)
+        Whether the beam is blanked.
+    """
 
     @Key
     def value(self) -> _tuple[int, int]:
+        """
+        Public access to the deflector value.
+
+        Returns
+        -------
+        tuple[int, int]
+            The PLA deflector value.
+        """
         v = self._controller.GetPLA()
         return v[0], v[1]
 
@@ -25,6 +43,14 @@ class Controller(Base):
 
     @Key
     def blanked(self) -> bool:
+        """
+        Public access to the blanking status.
+
+        Returns
+        -------
+        bool
+            Whether the beam is blanked.
+        """
         return bool(self._controller.GetBeamBlank())
 
     @blanked.setter
@@ -42,9 +68,22 @@ class Controller(Base):
         _ = self.value, self.blanked  # this will prime the keys with an instance
 
     def toggle_beam(self):
+        """
+        Toggle the beam status.
+        """
         self.blanked = not self.blanked
 
     def coarse_align(self, pos: _tuple[int, int], mode: ImagingMode):
+        """
+        Set the relative coarse alignment of the beam.
+
+        Parameters
+        ----------
+        pos: tuple[int, int]
+            The relative position of the beam. Undergoes int16 validation on each element.
+        mode: ImagingMode
+            The scan mode.
+        """
         for v in pos:
             validation.examples.int16.validate(v)
         if mode == ImagingMode.TEM:
@@ -53,6 +92,16 @@ class Controller(Base):
             self._controller.SetStemA1CoarseRel(*pos)
 
     def stig_align(self, pos: _tuple[int, int], mode: ImagingMode):
+        """
+        Set the relative stig alignment of the beam.
+
+        Parameters
+        ----------
+        pos: tuple[int, int]
+            The relative position of the beam. Undergoes int16 validation on each element.
+        mode: ImagingMode
+            The scan mode.
+        """
         for v in pos:
             validation.examples.int16.validate(v)
         if mode == ImagingMode.STEM:

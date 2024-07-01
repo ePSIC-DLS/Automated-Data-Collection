@@ -13,9 +13,29 @@ apt_kind = validation.Pipeline.enum(AptKind)
 
 
 class Controller(Base):
+    """
+    Concrete controller for the apertures.
+
+    Keys
+    ----
+    current: AptKind (enum validation)
+        The current aperture kind.
+    position: tuple[int, int] (int12 validation on each element)
+        The position of the aperture.
+    size: int (apt_size validation)
+        The size of the aperture.
+    """
 
     @Key
     def current(self) -> AptKind:
+        """
+        Public access to the aperture being controlled.
+
+        Returns
+        -------
+        AptKind
+            The current aperture kind.
+        """
         return AptKind(self._controller.GetExpKind())
 
     @current.setter
@@ -25,6 +45,14 @@ class Controller(Base):
 
     @Key
     def position(self) -> _tuple[int, int]:
+        """
+        Public access to the aperture's position.
+
+        Returns
+        -------
+        tuple[int, int]
+            The position of the aperture.
+        """
         v = self._controller.GetPosition()
         return v[0], v[1]
 
@@ -36,6 +64,14 @@ class Controller(Base):
 
     @Key
     def size(self) -> int:
+        """
+        Public access to the aperture's size.
+
+        Returns
+        -------
+        int
+            The size of the aperture.
+        """
         return self._controller.GetExpSize(self.current.value)
 
     @size.setter

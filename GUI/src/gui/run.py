@@ -126,6 +126,8 @@ class GUI(widgets.QMainWindow):
                 return vals.Number(obj.value)
             elif isinstance(obj, utils.Design):
                 return objs.NativeClass(obj)
+            elif obj is None:
+                return vals.Nil()
             try:
                 return vals.Array(*map(functools.partial(_value, ""), obj))
             except TypeError:
@@ -170,15 +172,15 @@ class GUI(widgets.QMainWindow):
 
         self._master.setUsesScrollButtons(False)
         stage_m = pages.additionals.Scanner(self._microscope, self._scanner)
-        stage_1 = pages.pipeline.SurveyImage(size, images.RGB(255, 0, 0), 8, self._scanner, stage_m.scan)
+        stage_1 = pages.pipeline.SurveyImage(size, 0xFF0000, 8, self._scanner, stage_m.scan)
         stage_2 = pages.pipeline.ProcessingPipeline(size, stage_1, _data_failed)
-        stage_3 = pages.pipeline.Clusters(size, images.RGB(255, 0, 0), 8, stage_2, _data_failed)
+        stage_3 = pages.pipeline.Clusters(size, 0xFF0000, 8, stage_2, _data_failed)
         stage_4 = pages.pipeline.Management(size, stage_1, stage_3, _data_failed)
-        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, images.RGB(0, 255, 0), _data_failed,
+        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, 0x00FF00, _data_failed,
                                             self._microscope, self._scanner, stage_3, stage_2)
 
-        stage_h = pages.additionals.Histogram(size, stage_1, images.Grey(255), _data_failed)
-        stage_p = pages.additionals.ScanType(size, images.RGB(0, 255, 0), _data_failed)
+        stage_h = pages.additionals.Histogram(size, stage_1, 0xFFFFFF, _data_failed)
+        stage_p = pages.additionals.ScanType(size, 0x00FF00, _data_failed)
         stage_c = pages.additionals.Manager(_data_failed, self._microscope, self._scanner, (size, size), stage_m.scan)
         stage_f = pages.additionals.DiffractionFilter(stage_3)
         corrections = stage_c.corrections()

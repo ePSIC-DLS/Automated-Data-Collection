@@ -20,6 +20,23 @@ ONLINE = False
 
 
 class Switch(typing.Generic[R]):
+    """
+    A context manager to represent a temporary change in a parameter's value.
+
+    Generics
+    --------
+    R
+        The value type.
+
+    Attributes
+    ----------
+    _old: R
+        The previous value to restore to.
+    _switch: Callable[[R], None]
+        The function to use to switch the value.
+    _delay: float
+        The delay in seconds between switching to normal control flow being resumed.
+    """
 
     def __init__(self, old: R, switch: typing.Callable[[R], None], delay: float):
         self._old = old
@@ -39,14 +56,45 @@ class Switch(typing.Generic[R]):
 
 
 class Key(typing.Generic[Inst, R]):
+    """
+    Property-like decorator to automatically create a switch with each value.
+
+    Generics
+    --------
+    Inst
+        The instance bound to this property. Acts as 'self' for the bound getter.
+    R
+        The value data type.
+
+    Attributes
+    ----------
+    _getter: Callable[[Inst], R]
+        The wrapped function to get the data.
+    _name: str
+        The property name.
+    _setter: Callable[[Inst, R], None] | None
+        The wrapped function to set the data.
+    _switch: Switch[R] | None
+        The switcher used to control the value.
+    _delay: float
+        The delay in seconds between switching the value.
+    """
 
     @property
     def delay(self) -> float:
+        """
+        Public access to the switch's delay.
+
+        Returns
+        -------
+        float
+            The delay for the switch.
+        """
         return self._delay
 
     @delay.setter
     def delay(self, value: float):
-        if value < 0:
+        if value <= 0:
             raise ValueError("Delay must be positive")
         elif self._delay:
             raise ValueError("Already set delay")
@@ -76,6 +124,25 @@ class Key(typing.Generic[Inst, R]):
         self._switch = Switch(value, functools.partial(self._setter, instance), self._delay)
 
     def setter(self, fn: typing.Callable[[Inst, R], None]) -> "Key":
+        """
+        Publicly assign a setter.
+
+        Parameters
+        ----------
+        fn: Callable[[Inst, R], None]
+            The setter function.
+
+        Returns
+        -------
+        Self
+            The same instance.
+
+        Raises
+        ------
+        ValueError
+            If the setter already exists.
+            If the setter has a different property name.
+        """
         if self._setter is not None:
             raise ValueError(f"Property {self._name} already has a setter")
         elif fn.__name__ != self._name:
@@ -84,11 +151,43 @@ class Key(typing.Generic[Inst, R]):
         return self
 
     def switch(self, to: R) -> Switch[R]:
+        """
+        Begin switching the value, then return the switch itself for use in a context manager.
+
+        Note that this function shouldn't be called except in a context manager.
+
+        Parameters
+        ----------
+        to: R
+            The value to switch to.
+
+        Returns
+        -------
+        Switch
+            The switch of this object.
+        """
         self._switch(to)
         return self._switch
 
 
 class ScanType(abc.ABC):
+    """
+    Abstract Base Class for types of scans when considering QD scan engine.
+
+    Abstract Methods
+    ----------------
+    rect
+
+    Attributes
+    ----------
+    _size: tuple[int, int]
+        The size of the scan.
+
+    Raises
+    ------
+    ValueError
+        If the scan size is not a natural number in any dimension.
+    """
 
     @property
     def size(self) -> _tuple[int, int]:

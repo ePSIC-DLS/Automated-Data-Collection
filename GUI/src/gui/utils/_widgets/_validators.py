@@ -296,8 +296,6 @@ class Enum(widgets.QComboBox, ValidatedWidget[E], typing.Generic[E]):
     def _modify(self, text: E):
         txt = text.name
         super().setCurrentText(txt)
-        if txt and txt[0] == txt[-1] == "'":
-            txt = txt[1:-1]
         self.setCurrentIndex(self._items.index(txt))
 
 

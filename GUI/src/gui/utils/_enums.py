@@ -99,15 +99,12 @@ class ColourDisplay(_Base):
     Members
     -------
     HEX
-        Display the hexadecimal 32-bit integer for the colour.
+        Display the hexadecimal 24-bit integer for the colour.
     RGB
         Display the RGB values as integers in a tuple.
-    NAME
-        Display the name of the colour.
     """
     HEX = _member()
     RGB = _member()
-    NAME = _member()
 
 
 class ErrorSeverity(_Base):
@@ -246,3 +243,56 @@ class Corrections(_Bitwise):
     FOCUS = _member()
     EMISSION = _member()
     DRIFT = _member()
+
+
+class OptimisationDirection(_Base):
+    """
+    Enumeration to represent the different step directions possible.
+
+    Members
+    -------
+    INCREASE
+    DECREASE
+    """
+    INCREASE = _member()
+    DECREASE = _member()
+
+    def shift(self, init: float, step: float) -> float:
+        """
+        Shift the value in the corresponding direction.
+
+        Parameters
+        ----------
+        init: float
+            The initial value.
+        step: float
+            The step value.
+
+        Returns
+        -------
+        float
+            The shifted value.
+        """
+        if self == self.INCREASE:
+            return init + step
+        else:
+            return init - step
+
+    @classmethod
+    def cmp(cls, value: float) -> "OptimisationDirection":
+        """
+        Alternative constructor to compare a value to 0 to determine the new direction.
+
+        Parameters
+        ----------
+        value: float
+            The value to compare.
+
+        Returns
+        -------
+        OptimisationDirection
+            The new direction.
+        """
+        if value > 0:
+            return cls.INCREASE
+        return cls.DECREASE

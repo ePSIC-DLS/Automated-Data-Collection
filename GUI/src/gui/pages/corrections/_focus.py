@@ -1,3 +1,4 @@
+import operator
 import typing
 
 import numpy as np
@@ -53,6 +54,7 @@ class AutoFocus(ShortCorrectionPage):
             num_images = self._amount.focus.get_data()
             variances, defocuses = [], []
             link = self._link.subsystems["Lenses"]
+            direction = utils.OptimisationDirection.INCREASE
             with link.switch_lens(microscope.Lens.OL_FINE):
                 focus = link.value
                 df = self._df.focus.get_data()
@@ -64,11 +66,11 @@ class AutoFocus(ShortCorrectionPage):
                     defocuses.append(focus)
                     if i:
                         delta = variances[i] - variances[i - 1]
-                        if delta < 0:
-                            if i > 1:
-                                break
-                        df *= -1
-                    focus += df
+                        old = direction
+                        direction = utils.OptimisationDirection.cmp(delta)
+                        if direction != old and i > 1:
+                            break
+                    focus = direction.shift(focus, df)
                     link.value = focus
             if variances:
                 max_i = np.argmax(variances)
@@ -77,7 +79,7 @@ class AutoFocus(ShortCorrectionPage):
         self.runEnd.emit()
 
     def _get_variance(self) -> float:
-        array = self._image.image()
+        array = self._image.convert(np.float64)
         return array.var() / (array.mean() ** 2)
 
     def all_settings(self) -> typing.Iterator[str]:

@@ -9,13 +9,46 @@ else:
 
 
 class Controller(Base):
+    """
+    Concrete controller for the FEG system.
+
+    Keys
+    ----
+    ready: bool (read-only)
+        Whether the v1 is ready.
+    emission: bool
+        Whether the emission is enabled.
+    valve: bool
+        Whether the valve is open.
+    """
 
     @Key
     def ready(self) -> bool:
+        """
+        Public access to the state of the v1 subsystem.
+
+        Returns
+        -------
+        bool
+            Whether the v1 is ready.
+        """
         return bool(self._controller.GetV1Ready())
 
     @Key
     def emission(self) -> bool:
+        """
+        Public access to the state of the emission subsystem.
+
+        Returns
+        -------
+        bool
+            Whether the emission is enabled.
+
+        Raises
+        ------
+        ValueError
+            If the process errors.
+        """
         phase, status = self._controller.GetEmissionOnStatus()
         if phase == -1:
             raise ValueError("Process has errored")
@@ -35,6 +68,14 @@ class Controller(Base):
 
     @Key
     def valve(self) -> bool:
+        """
+        Public access to the state of the valve subsystem.
+
+        Returns
+        -------
+        bool
+            Whether the valve is open.
+        """
         return bool(self._controller.GetBeamValve())
 
     @valve.setter
@@ -52,6 +93,19 @@ class Controller(Base):
         _ = self.ready, self.emission, self.valve  # this will prime the keys with an instance
 
     def auto_flash_control(self, on: bool):  # possibly change signature - is flashing timed?
+        """
+        Automatically flashes the beam tip.
+
+        Parameters
+        ----------
+        on: bool
+            Whether the flash should be started or stopped.
+
+        Raises
+        ------
+        ValueError
+            If the FEG is not ready.
+        """
         validation.examples.any_bool.validate(on)
         if not self.ready:
             raise ValueError("Cannot flash tip without being ready")

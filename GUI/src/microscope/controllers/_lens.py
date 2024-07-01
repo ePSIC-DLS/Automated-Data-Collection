@@ -11,9 +11,27 @@ lens = validation.Pipeline.enum(Lens)
 
 
 class Controller(Base):
+    """
+    Concrete controller for the lenses.
+
+    Keys
+    ----
+    current: Lens (enum validation)
+        The current lens being controlled.
+    value: int (read-only)
+        The value of the lens being controlled.
+    """
 
     @Key
     def current(self) -> Lens:
+        """
+        Public access to the controlling lens.
+
+        Returns
+        -------
+        Lens
+            The current lens being controlled.
+        """
         return self._current
 
     @current.setter
@@ -23,6 +41,14 @@ class Controller(Base):
 
     @Key
     def value(self) -> int:
+        """
+        Public access to the lens data.
+
+        Returns
+        -------
+        int
+            the value of the lens being controlled.
+        """
         return self._controller.GetLensInfo(self._current.value)
 
     def __init__(self, current: Lens):

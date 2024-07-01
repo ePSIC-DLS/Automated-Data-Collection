@@ -3,7 +3,7 @@ import operator
 import typing
 from typing import List as _list, Optional as _None, Tuple as _tuple
 from ._enums import *
-from ...images import AABBCorner
+from ...images import AABBCorner, XAxis, YAxis
 
 import numpy as np
 import numpy.typing as npt
@@ -141,11 +141,11 @@ class Continuous(Design[Stroke], abc.ABC):
         return super().__getitem__(item)
 
     def _setup(self) -> _tuple[_tuple[int, int, int], _tuple[int, int, int]]:
-        if self._start.x() == "left":
+        if self._start.x() == XAxis.LEFT:
             x_info = 0, int(self._cov[0] * self._size[0]) - 1, 1
         else:
             x_info = self._size[0] - 1, int((1 - self._cov[0]) * self._size[0]), -1
-        if self._start.y() == "top":
+        if self._start.y() == YAxis.TOP:
             y_info = 0, int(self._cov[1] * self._size[1]) - 1, 1
         else:
             y_info = self._size[1] - 1, int((1 - self._cov[1]) * self._size[1]), -1

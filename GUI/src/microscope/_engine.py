@@ -132,13 +132,7 @@ class Scanner:
         self._engine.stop_imaging()
         monitor.wait_for_image()
         if return_:
-            image = monitor.pop().get_input_data(3)[sy:ey, sx:ex]
-
-            img_min = np.abs(np.min(image))
-            p_img = image.astype(np.float32) + img_min
-            p_img = ((p_img / np.max(p_img)) * 255).astype(np.uint8)
-
-            return GreyImage(p_img)
+            return GreyImage(monitor.pop().get_input_data(3)[sy:ey, sx:ex])
 
     def using_connection(self, line_index: int, mode: TTLMode, source: TriggerSource, *,
                          active: float = None, delay: float = None, count: int = None) -> Connection:

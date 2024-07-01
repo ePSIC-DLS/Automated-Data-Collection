@@ -2,6 +2,7 @@ import abc
 import typing
 from typing import List as _list, Tuple as _tuple
 
+import numpy as np
 import typing_extensions
 from PyQt5 import QtCore as core, QtGui as gui, QtWidgets as widgets
 
@@ -114,26 +115,12 @@ class CanvasPage(Page, abc.ABC):
         yield f"<{x}, {y}>"
         # <editor-fold desc="Colour Handling">
         with self._canvas as img:
-            colour = img[x, y]
+            colour = img.normalise(img[x, y])  # should be in range 0 → (2 ** 24 - 1)
         if self._display_type == utils.ColourDisplay.HEX:
-            clr = str(colour)
-        elif self._display_type == utils.ColourDisplay.RGB:
-            clr = str(colour.items())
+            clr = f"#{colour:06x}"
         else:
-            colours = []
-            if colour["r"]:
-                colours.append("red")
-            if colour["g"]:
-                colours.append("green")
-            if colour["b"]:
-                colours.append("blue")
-            if isinstance(colour, images.Grey):
-                clr = "black" if colour["r"] == 0 else ("white" if colour["r"] == 255 else "grey")
-                clr = f"A solid {clr}"
-            elif len(colours) == 1:
-                clr = f"A solid {colours[0]}"
-            else:
-                clr = f"A mixture of {' and '.join(colours)}"
+            hexa = f"{colour:06x}"
+            clr = str((int(hexa[0:2], 16), int(hexa[2:4], 16), int(hexa[4:6], 16)))
         # </editor-fold>
         yield clr
 
@@ -145,7 +132,7 @@ class ClusterPage(CanvasPage, abc.ABC):
     def cluster(self) -> typing.Optional[images.RGBImage]:
         return self._cluster_image
 
-    def __init__(self, size: int, cluster_colour: images.RGB, initial_size: int, canvas_tracks=True,
+    def __init__(self, size: int, cluster_colour: np.int_, initial_size: int, canvas_tracks=True,
                  movement_handler: typing.Callable[[gui.QMouseEvent], None] = None):
         super().__init__(size, canvas_tracks, movement_handler)
         self._clusters: _list[utils.Cluster] = []
@@ -153,10 +140,10 @@ class ClusterPage(CanvasPage, abc.ABC):
         self._cluster_colour = cluster_colour
         self._pitch_size = initial_size
 
-    def colour(self) -> images.RGB:
+    def colour(self) -> np.int_:
         return self._cluster_colour
 
-    def set_colour(self, colour: images.RGB):
+    def set_colour(self, colour: np.int_):
         self._cluster_colour = colour
 
     def pitch_size(self) -> int:
@@ -237,8 +224,6 @@ class SettingsPage(Page, abc.ABC, typing.Generic[P]):
             return widget.isChecked()
         elif isinstance(widget, utils.OrderedGroup):
             return tuple(map(SettingsPage.getter, widget.get_members()))
-        elif isinstance(widget, utils.ScanPatternGroup):
-            return widget.chosen()
         elif isinstance(widget, widgets.QLabel):
             return widget.text()
         raise NotImplementedError(f"{type(widget)} unhandled")
@@ -251,8 +236,6 @@ class SettingsPage(Page, abc.ABC, typing.Generic[P]):
             widget.change_data(value)
         elif isinstance(widget, widgets.QCheckBox):
             widget.setCheckState(value)
-        elif isinstance(widget, utils.ScanPatternGroup):
-            widget.select(value)
         elif isinstance(widget, utils.OrderedGroup):
             widget.configure_members(SettingsPage.getter, SettingsPage.setter, *value)
         elif isinstance(widget, widgets.QLabel):

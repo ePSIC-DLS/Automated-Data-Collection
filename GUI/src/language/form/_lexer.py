@@ -73,7 +73,7 @@ class Lexer:
         if result is not None:
             return result
         char = self._curr
-        if char.isalpha():
+        if char.isalpha() or char == "_":
             return self._word(char)
         elif char.isdigit():
             return self._num(char)

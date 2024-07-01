@@ -248,9 +248,8 @@ class CombinationMixin(Mixin, typing.Generic[typing_extensions.Unpack[Ts]]):
         if self._mode == UnionType.OR:
             if num_passed == 0:
                 raise Error(f"Expected at least one validator to pass {data}")
-        else:
-            if num_passed != self._num_validators:
-                raise Error(f"Expected exactly {self._num_validators} validators to pass {data}")
+        elif num_passed != self._num_validators:
+            raise Error(f"Expected exactly {self._num_validators} validators to pass {data}")
 
 
 class BranchedMixin(Mixin, typing.Generic[typing_extensions.Unpack[Ts]]):

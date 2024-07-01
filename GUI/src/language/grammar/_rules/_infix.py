@@ -84,6 +84,8 @@ class BinaryOperatorRule(InfixRule[_t.Token]):
             parser.emit(_Byte.ADD)
         elif right.token_type == _t.TokenType.NEG:
             parser.emit(_Byte.SUB)
+        elif right.token_type == _t.TokenType.COMBINE:
+            parser.emit(_Byte.MIX)
         elif right.token_type == _t.TokenType.EQ:
             parser.emit(_Byte.EQUAL)
         elif right.token_type == _t.TokenType.NEQ:
@@ -96,8 +98,6 @@ class BinaryOperatorRule(InfixRule[_t.Token]):
             parser.emit(_Byte.MORE, _Byte.INVERT)
         elif right.token_type == _t.TokenType.GTE:
             parser.emit(_Byte.LESS, _Byte.INVERT)
-        elif right.token_type == _t.TokenType.COMBINE:
-            parser.emit(_Byte.MIX)
 
     def get_precedence(self) -> Precedence:
         return self._p

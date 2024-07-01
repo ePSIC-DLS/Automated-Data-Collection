@@ -1,8 +1,7 @@
 import typing
-from typing import Tuple as _tuple, List as _list
+from typing import List as _list, Tuple as _tuple
 
 import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 
 from ._enums import *
@@ -78,11 +77,11 @@ class ScanRegion:
         """
         if not isinstance(item, images.AABBCorner):
             raise TypeError(f"Expected a valid corner, got {item}")
-        if item.x() == "left":
+        if item.x() == images.XAxis.LEFT:
             x = self._left
         else:
             x = self._right
-        if item.y() == "top":
+        if item.y() == images.YAxis.TOP:
             y = self._top
         else:
             y = self._bottom
@@ -125,8 +124,8 @@ class ScanRegion:
         """
         if not isinstance(other, Cluster):
             return NotImplemented
-        area = other.cluster.region(self[images.AABBCorner.TOP_LEFT], self[images.AABBCorner.BOTTOM_RIGHT])
-        count = np.count_nonzero(area.image())
+        area = other.cluster.region(self[images.AABBCorner.TOP_LEFT], self[images.AABBCorner.BOTTOM_RIGHT]).data()
+        count = np.count_nonzero(area)
         return count
 
     __rand__ = __and__
@@ -147,12 +146,12 @@ class ScanRegion:
         if self._disabled:
             return
         with h5py.File(filepath, "a") as file:
-            file.create_dataset("Captured Square", data=bg.image.reference())
+            file.create_dataset("Captured Square", data=bg.data())
             dset = file.create_group("Co-ordinates (cartesian)")
             dset.attrs["top left"] = self[images.AABBCorner.TOP_LEFT]
             dset.attrs["bottom right"] = self[images.AABBCorner.BOTTOM_RIGHT]
 
-    def draw(self, onto: images.RGBImage, outline: images.RGB, *, filled=False):
+    def draw(self, onto: images.RGBImage, outline: np.int_, *, filled=False):
         """
         Draw the region onto an image.
 
@@ -167,8 +166,8 @@ class ScanRegion:
         """
         if self._disabled:
             return
-        onto.drawing.safe_square.from_size((self._left, self._top, images.AABBCorner.TOP_LEFT), self._delta, outline,
-                                           fill=None if not filled else outline)
+        onto.drawings.square.size((self._left, self._top), self._delta, outline, safe=True,
+                                  fill=None if not filled else outline)
 
     def move(self, by: _tuple[int, int]):
         self._left += by[0]
@@ -268,7 +267,7 @@ class Grid:
         else:
             yield from self._all
 
-    def draw(self, onto: images.RGBImage, colour: images.RGB = None):
+    def draw(self, onto: images.RGBImage, colour: np.int_ = None):
         """
         Draw the entire grid onto an image.
 
@@ -301,9 +300,10 @@ class Grid:
         if min_rel < 0 or min_rel > 1:
             raise TypeError(f"Expected a percentage, got {min_rel}")
 
+        min_abs = int(min_rel * self._pitch_size ** 2)
+
         def _valid(region: ScanRegion) -> bool:
             try:
-                min_abs = int(min_rel * self._pitch_size ** 2)
                 count = (region & self._owner)
                 return count >= min_abs
             except ValueError:
@@ -313,7 +313,7 @@ class Grid:
         self._is_tight = True
 
     def _regions(self) -> typing.Iterator[ScanRegion]:
-        def _pad(minima: int, maxima: int, i: int) -> _tuple[int, int]:
+        def _pad(minima: int, maxima: int) -> _tuple[int, int]:
             do_min = do_max = True
             while (maxima - minima) % self._pitch_size:
                 if not do_max and not do_min:
@@ -334,8 +334,8 @@ class Grid:
 
         left, right = self._owner.extreme(Axis.X, Extreme.MINIMA), self._owner.extreme(Axis.X, Extreme.MAXIMA)
         top, bottom = self._owner.extreme(Axis.Y, Extreme.MINIMA), self._owner.extreme(Axis.Y, Extreme.MAXIMA)
-        self._left, self._right = _pad(left, right, 0)
-        self._top, self._bottom = _pad(top, bottom, 1)
+        self._left, self._right = _pad(left, right)
+        self._top, self._bottom = _pad(top, bottom)
         curr_y = self._top + self._start[1]
         while curr_y + self._pitch_size <= self._bottom:
             curr_x = self._left + self._start[0]
@@ -346,28 +346,6 @@ class Grid:
 
 
 class Cluster:
-    """
-    Represents an n-sided polygon. Each cluster has an underlying binary image for fast collision detection.
-
-    Attributes
-    ----------
-    _label: RGB
-        The colour of the cluster. This is the unique identifier for this object.
-    _binary: GreyBimodal
-        The binary image representing the cluster. This has the filled polygon in white.
-    _y: np.ndarray
-        A 1-dimensional array of y-coordinate indices to represent the cluster.
-    _x: np.ndarray
-        A 1-dimensional array of x-coordinate indices to represent the cluster.
-    _marked: bool
-        Flag indicating whether the cluster has been marked by a grid.
-
-
-    Raises
-    ------
-    TypeError
-        If the bimodal image is not bimodal on black and the label colour.
-    """
 
     @property
     def locked(self) -> bool:
@@ -386,19 +364,7 @@ class Cluster:
         self._marked = value
 
     @property
-    def label(self) -> int:
-        """
-        Public access to the unique identifier for this cluster.
-
-        Returns
-        -------
-        int
-            The sum of all channels in the label colour.
-        """
-        return sum(self._label.items())
-
-    @property
-    def cluster(self) -> images.GreyBimodal:
+    def cluster(self) -> images.GreyBiModal:
         """
         Public access to the underlying image.
 
@@ -410,7 +376,7 @@ class Cluster:
         return self._binary
 
     @property
-    def id(self) -> images.RGB:
+    def id(self) -> np.int_:
         """
         Public access to the colour of this cluster.
 
@@ -421,15 +387,14 @@ class Cluster:
         """
         return self._label
 
-    def __init__(self, image: images.RGBBimodal, label: int):
-        self._label = images.RGB(0, 0, label, wrapping=images.WrapMode.SPILL, order=images.RGBOrder.BGR)
-        if image.colours != {images.Grey(0), self._label}:
-            raise TypeError(f"Expected image colours to be '#000000' and '{self._label}', got "
-                            f"{set(map(str, image.colours))}")
-        promoted_image = image.upchannel().find_replace(self._label, images.Grey(255))
-        demoted_image = promoted_image.demote("r")
-        self._binary = demoted_image.downchannel(images.Grey(0), images.Grey(255))
-        img = self._binary.image.reference()
+    def __init__(self, image: images.RGBBiModal, label: int):
+        self._label = np.int_(label)
+        if image.get_colours() != {np.int_(0), self._label}:
+            raise TypeError(f"Expected image colours to be 0 and {label}, got {image.get_colours()}")
+        promoted_image = image.upchannel().find_replace(self._label, 255)
+        demoted_image = promoted_image.demote()
+        self._binary = demoted_image.downchannel(0, 255)
+        img = self._binary.data()
         rows_f, = np.nonzero(np.sum(img, axis=0))
         cols_f, = np.nonzero(np.sum(img, axis=1))
         self._min = (rows_f[0], cols_f[0])
@@ -450,10 +415,10 @@ class Cluster:
         bool
             Whether the specified co-ordinate is in the cluster.
         """
-        return np.any(self._binary.image()[point[1], point[0]])
+        return bool(self._binary[point])
 
     def __str__(self) -> str:
-        return f"Cluster {self.label}"
+        return f"Cluster {self.id}"
 
     def __hash__(self) -> int:
         return hash(self._label)
@@ -587,7 +552,6 @@ class Cluster:
         Cluster
             The cluster created from a known polygon.
         """
-        label_colour = images.RGB(0, 0, label, wrapping=images.WrapMode.SPILL, order=images.RGBOrder.BGR)
         bg = images.RGBImage.blank(im_size)
-        bg.drawing.polygon.from_vertices(label_colour, v1, v2, v3, *v_e)
-        return cls(bg.downchannel(images.Grey(0), label_colour), label)
+        bg.drawings.polygon.vertices(label, v1, v2, v3, *v_e)
+        return cls(bg.downchannel(0, label), label)

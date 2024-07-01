@@ -270,3 +270,7 @@ class Array(Value[_list[Value]]):
         if isinstance(other, Array):
             return Array(*self._value, *other.raw)
         return super().mix(other)
+
+    def equal(self, other: "Value") -> _None["Value"]:
+        if isinstance(other, Array):
+            return Bool(all(x == y for x, y in zip(self.raw, other.raw)))
