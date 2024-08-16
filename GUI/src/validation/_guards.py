@@ -287,7 +287,7 @@ class BranchedMixin(Mixin, typing.Generic[typing_extensions.Unpack[Ts]]):
     @branch.setter
     def branch(self, value: int):
         if not 0 <= value < self._max:
-            raise ValueError(f"Expected branch number between 0 and {self._max - 1}")
+            raise ValueError(f"Expected branch number between 0 and {self._max - 1} (got {value})")
         self._i = value
         self._v = self._vs[value]
 
@@ -697,8 +697,8 @@ class RangeValidator(CombinationMixin[T], typing.Generic[T]):
         except Error:
             lower = " (exclusive) " if not self._vs[0].inclusive else " "
             upper = " (exclusive)" if not self._vs[1].inclusive else ""
-            raise Error(f"Expected {data!r} to be between {self._vs[0].bound}{lower}and {self._vs[1].bound}{upper}") \
-                from None
+            l_bound, u_bound = map(lambda v: v.bound, self._vs)
+            raise Error(f"Expected {data!r} to be between {l_bound}{lower}and {u_bound}{upper}") from None
 
     @classmethod
     def known(cls, bounds: _tuple[T, T], *, l_bound=True, u_bound=True) -> "RangeValidator[T]":

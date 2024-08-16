@@ -14,10 +14,8 @@ class InfixRule(_Gen[_T], _abc.ABC):
 
     Generics
     --------
-    _E: Expr
-        The expression type returned.
     _T: Token
-        The token type previously consumed. Is usually the type of expression (as Expr is generic itself)
+        The token type previously consumed.
 
     Abstract Methods
     ----------------
@@ -28,19 +26,17 @@ class InfixRule(_Gen[_T], _abc.ABC):
     @_abc.abstractmethod
     def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         """
-        Parse this particular rule into a valid expression.
+        Method for emitting the particular series of instructions that represent this rule.
 
         Parameters
         ----------
         parser: Consumer
-            The consumer that can parse tokens.
+            The consumer that is parsing.
         token: _T
-            The previously consumed token.
-
-        Returns
-        -------
-        _E
-            The expression parsed from the token stream.
+            The token type previously consumed.
+        allowed_assignment: bool
+            Whether this rule can turn into an assignment (for instance "x.y" can turn into "x.y = 3", but "a * b" can't
+            turn into "a * b = 3").
         """
         pass
 
@@ -63,8 +59,6 @@ class BinaryOperatorRule(InfixRule[_t.Token]):
 
     Bound Generics
     --------------
-    _E: BinaryExpr
-
     _T: Token
 
     Attributes
@@ -104,6 +98,13 @@ class BinaryOperatorRule(InfixRule[_t.Token]):
 
 
 class PrintRule(InfixRule[_t.Token]):
+    """
+    Concrete rule for parsing postfix print expressions.
+
+    Bound Generics
+    --------------
+    _T: Token
+    """
 
     def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         parser.emit(_Byte.PRINT)
@@ -113,6 +114,13 @@ class PrintRule(InfixRule[_t.Token]):
 
 
 class CallRule(InfixRule[_t.Token]):
+    """
+    Concrete rule for parsing infix bracket expressions.
+
+    Bound Generics
+    --------------
+    _T: Token
+    """
 
     def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         parser.emit(_Byte.CALL, self.list(parser))
@@ -122,6 +130,19 @@ class CallRule(InfixRule[_t.Token]):
 
     @classmethod
     def list(cls, parser: Consumer) -> int:
+        """
+        Static method for collecting a series of expressions into an argument list.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that is parsing.
+
+        Returns
+        -------
+        int
+            The number of arguments.
+        """
         count = 0
         while not parser.match(_t.TokenType.END_CALL):
             parser.expr()
@@ -132,6 +153,13 @@ class CallRule(InfixRule[_t.Token]):
 
 
 class Get(InfixRule[_t.Token]):
+    """
+    Concrete rule for parsing infix bracket expressions.
+
+    Bound Generics
+    --------------
+    _T: Token
+    """
 
     def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         name = parser.chunk.add(_v.String(parser.consume(_t.IdentifierToken, "Expected field name").src))

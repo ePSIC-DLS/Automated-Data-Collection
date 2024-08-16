@@ -102,7 +102,7 @@ class Image(abc.ABC):
             if (self._min is not None and self._max is not None) and np.any(
                     (self._data < self._min) | (self._data > self._max)
             ):
-                raise TypeError(f"Array has been edited externally! Elements are out of static bounds")
+                raise TypeError("Array has been edited externally! Elements are out of static bounds")
         return super().__getattribute__(item)
 
     def __bool__(self) -> bool:

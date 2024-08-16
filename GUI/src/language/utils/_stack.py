@@ -5,9 +5,34 @@ T = typing.TypeVar("T")
 
 
 class Stack(typing.Generic[T]):
+    """
+    Class to represent a stack of items, with a defined top and bottom to allow for linking stacks.
+
+    Generics
+    --------
+    T
+        The value type.
+
+    Attributes
+    ----------
+    _stack: list[T]
+        The actual stack, implemented as a list.
+    _min: int
+        The lowest index of the stack.
+    _max: int
+        The highest index of the stack.
+    """
 
     @property
     def top(self) -> int:
+        """
+        Public access to the top index of the stack.
+
+        Returns
+        -------
+        int
+            The highest index of the stack.
+        """
         return self._max
 
     @top.setter
@@ -18,6 +43,14 @@ class Stack(typing.Generic[T]):
 
     @property
     def bottom(self) -> int:
+        """
+        Public access to the bottom index of the stack.
+
+        Returns
+        -------
+        int
+            The lowest index of the stack.
+        """
         return self._min
 
     def __init__(self, offset=0):
@@ -53,14 +86,44 @@ class Stack(typing.Generic[T]):
         return new
 
     def push(self, item: T):
+        """
+        Push a new item to the stack, changing the top.
+
+        Parameters
+        ----------
+        item: T
+            The item to push.
+        """
         self._stack.append(item)
         self._max += 1
 
     def pop(self) -> T:
+        """
+        Pop the top item from the stack, changing the top.
+
+        Returns
+        -------
+        T
+            The top item from the stack.
+        """
         self._max -= 1
         return self._stack.pop()
 
     def peek(self, depth=0) -> T:
+        """
+        Peek a certain depth down the stack.
+
+        Parameters
+        ----------
+        depth: int
+            The number of items to peek down.
+            By default, this is 0 which means the top item.
+
+        Returns
+        -------
+        T
+            The item at the peeked index.
+        """
         if not (self._min <= self._max - depth - 1 < self._max):
             raise ValueError("Invalid peek index")
         return self._stack[self._max - depth - 1]

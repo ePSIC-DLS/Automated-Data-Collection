@@ -15,7 +15,7 @@ from ._04_manager import Management
 from ... import utils
 from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widgets
 from ..._errors import *
-from .... import microscope, validation
+from .... import load_settings, microscope, validation
 
 import logging
 
@@ -23,6 +23,22 @@ Corners = images.AABBCorner
 
 
 class GridDict(utils.SettingsDict):
+    """
+    Typed dictionary representing the advanced grid search settings.
+
+    Keys
+    ----
+    scan_size: ComboBox[int]
+        The real size of the grid scan.
+    exposure_time: Spinbox
+        The time in seconds to spend on each pixel in the scan.
+    bit_depth: ComboBox[int]
+        The bit depth of the grid scan (only available for merlin data).
+    save_path: Entry
+        The filepath for the images to be saved to. This supports python f-string formatting using '{}'.
+    checkpoints: Flag[Stages]
+        The additional images to be saved as metadata.
+    """
     scan_size: utils.ComboBox[int]
     exposure_time: utils.Spinbox
     bit_depth: utils.ComboBox[int]
@@ -30,7 +46,40 @@ class GridDict(utils.SettingsDict):
     checkpoints: utils.Flag[utils.Stages]
 
 
+default_settings = load_settings("assets/config.json",
+                                 scan_size=validation.examples.survey_size,
+                                 exposure_time=validation.examples.dwell_time,
+                                 bit_depth=validation.examples.bit_depth,
+                                 save_path=validation.examples.any_str,
+                                 checkpoints=validation.examples.flag_4,
+                                 scan_mode=validation.examples.any_bool,
+                                 session=validation.examples.save_path,
+                                 sample=validation.examples.save_path,
+                                 scan_resolution=validation.examples.resolution
+                                 )
+
+
 class GridSettings(utils.SettingsPopup):
+    """
+    Concrete popup representing the advanced clustering settings.
+
+    Attributes
+    ----------
+    _merlin: bool
+        Whether the merlin scan is enabled by default.
+    _size: ComboBox[int]
+        The widget controlling the scan size.
+    _exposure_branches: VBranchedMixin[float, float, float, float]
+        The various possible exposure time values. These are dependent on whether merlin is activated and the bit depth.
+    _exposure: Spinbox
+        The widget controlling the exposure time.
+    _depth: ComboBox[int]
+        The widget controlling the bit depth.
+    _path: Entry
+        The widget controlling the filepath.
+    _extras: Flag[Stages]
+        The widget controlling the metadata images.
+    """
 
     def __init__(self, failure_action: typing.Callable[[Exception], None]):
         super().__init__()
@@ -72,31 +121,36 @@ class GridSettings(utils.SettingsPopup):
             elif exp == " ":
                 return dig
 
-        self._merlin = True
-        self._size = utils.ComboBox(*DeepSearch.SIZES, start_i=-1)
+        self._merlin = default_settings["scan_mode"]
+        size = DeepSearch.SIZES.index(default_settings["scan_size"])
+        self._size = utils.ComboBox(*DeepSearch.SIZES, start_i=size)
         self._size.dataPassed.connect(lambda v: self.settingChanged.emit("scan_size", v))
         self._size.dataFailed.connect(failure_action)
-        self._exposure_branches = validation.VBranchedMixin(
+        self._exposure_branches = validation.VBranchedMixin[float, float, float, float](
             validation.RangeValidator.known((40e-9, 70)),
             validation.RangeValidator.known((100e-6, 5e-3)),
             validation.RangeValidator.known((600e-6, 5e-3)),
             validation.RangeValidator.known((1e-3, 5e-3)),
-            branch=1)
+            branch=0)
         exposure = validation.examples.any_float + validation.Pipeline(validation.Step(self._exposure_branches,
                                                                                        desc="ensure the exposure time "
                                                                                             "is valid."),
                                                                        in_type=float, out_type=int)
-        self._exposure = utils.Spinbox(1e-3, 100e-6, exposure, display=(_add_unit, _sub_unit))
+        self._exposure = utils.Spinbox(default_settings["exposure_time"], 100e-6, exposure,
+                                       display=(_add_unit, _sub_unit))
         self._exposure.dataPassed.connect(lambda v: self.settingChanged.emit("exposure_time", v))
         self._exposure.dataFailed.connect(failure_action)
-        self._depth = utils.ComboBox(1, 6, 12, start_i=1)
+        bit_depth = (1, 6, 12).index(default_settings["bit_depth"])
+        self._depth = utils.ComboBox(1, 6, 12, start_i=bit_depth)
         self._depth.dataPassed.connect(lambda v: self.settingChanged.emit("bit_depth", v))
         self._depth.dataPassed.connect(self._edit_exposure)
+        self._edit_exposure(bit_depth)
         self._depth.dataFailed.connect(failure_action)
-        self._path = utils.Entry("X:/data/2024/{session}/Merlin/{sample}", validation.examples.file_path, "\"")
+        self._path = utils.Entry(default_settings["save_path"], validation.examples.file_path, "\"")
         self._path.dataPassed.connect(lambda v: self.settingChanged.emit("save_path", v))
         self._path.dataFailed.connect(failure_action)
-        self._extras = utils.Flag(utils.Stages, utils.Stages(15))
+        flags = map(lambda f, p: int(f) * 2 ** p, default_settings["checkpoints"], range(3, -1, -1))
+        self._extras = utils.Flag(utils.Stages, utils.Stages(sum(flags)))
         self._extras.dataPassed.connect(lambda v: self.settingChanged.emit("checkpoints", v))
         self._extras.dataFailed.connect(failure_action)
 
@@ -116,34 +170,95 @@ class GridSettings(utils.SettingsPopup):
                 "save_path": self._path, "checkpoints": self._extras}
 
     def new_merlin_state(self, new: bool):
+        """
+        Change the merlin state.
+
+        Parameters
+        ----------
+        new: bool
+            The new state of the merlin scanner.
+        """
         self._merlin = new
         if not new:
             self._exposure_branches.branch = 0
+        self._depth.setEnabled(new)
         self._edit_exposure(self._depth.currentIndex())
 
     def _edit_exposure(self, new: int):
         if not self._merlin:
             return
         self._exposure_branches.branch = new
+        if new == 0:
+            return
         v = self._exposure.get_data()
-        if new == 1 and v < 100:
-            self._exposure.change_data(100)
-        elif new == 6 and v < 600:
-            self._exposure.change_data(600)
-        elif new == 12 and v < 1000:
-            self._exposure.change_data(1000)
-        elif v > 5000:
-            self._exposure.change_data(5000)
+        if new == 1 and v < 100e-6:
+            self._exposure.change_data(100e-6)
+        elif new == 6 and v < 600e-6:
+            self._exposure.change_data(600e-6)
+        elif new == 12 and v < 1e-3:
+            self._exposure.change_data(1e-3)
+        elif v > 5e-3:
+            self._exposure.change_data(5e-3)
 
 
 class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
+    """
+    Concrete page representing the scanning of each exported region. This performs the scan at a much higher resolution.
+
+    Signals
+    -------
+    scanPerformed:
+        Emitted whenever a scan is performed. Contains no data.
+
+    Attributes
+    ----------
+    SIZES: tuple[int, ...]
+        The available sizes for the grid squares.
+    _regions: tuple[ScanRegion, ...]
+        The regions that are going to be scanned.
+    _grids: Management
+        The cluster manager spawning the grids.
+    _image: SurveyImage
+        The survey image controller.
+    _marker: int_
+        The colour of the scanned squares.
+    _clusters: Callable[[], ndarray[uint8, (r, c, 3)]
+        The function that will grab the cluster image and convert it into a matplotlib compatible 3D array as scan
+        metadata.
+    _pipeline: Callable[[], ndarray[uint8, (r, c, 3)]
+        The function that will grab the pre-processed image and convert it into a matplotlib compatible 3D array as scan
+        metadata.
+    _survey: Callable[[], ndarray[uint8, (r, c, 3)]
+        The function that will grab the survey image and convert it into a matplotlib compatible 3D array as scan
+        metadata.
+    _automate: bool
+        Whether the run is fully automated (single-threaded).
+    _logger: Logger | None
+        The logger used to document drift.
+    _scan_mode: LabelledWidget[CheckBox]
+        The widget controlling whether merlin scan is enabled.
+    _session: LabelledWidget[Entry]
+        The widget controlling the session id. The string in the entry must be a valid save path.
+    _sample: LabelledWidget[Entry]
+        The widget controlling the sample. The string in the entry must be a valid save path.
+    _progress: QProgressBar
+        The widget indicating current progress.
+    _mic: Microscope
+        The link to the microscope system to read metadata.
+    _scanner: Scanner
+        The link to the scan-engine used to perform the scan.
+    _resolution: int
+        The current high-resolution being used.
+    _i: int
+        The index of the next square to scan.
+    """
     settingChanged = SettingsPage.settingChanged
     scanPerformed = core.pyqtSignal()
     _clusterScanned = core.pyqtSignal(int)
     _newVal = core.pyqtSignal(int)
     SIZES = (64, 128, 256, 512)
 
-    def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_,
+    def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_, done: np.int_,
                  failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
                  scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline):
         DeepSearch.SIZES = tuple(s for s in DeepSearch.SIZES if s < size)
@@ -156,22 +271,23 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             err = "Cannot add clustered image to save file when clustering has not been performed"
             if clusters.modified is None:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Specified Null Step", err)
-            return clusters.modified.data.reference()
+            return self._img(clusters.modified)
 
         def _pipeline_image() -> np.ndarray:
             err = "Cannot add processed image to save file when clustering has not been performed"
             if pipeline.modified is None:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Specified Null Step", err)
-            return pipeline.modified.data.reference()
+            return self._img(pipeline.modified)
 
         def _survey_image() -> np.ndarray:
-            return image.modified.data.reference()
+            return self._img(image.modified)
 
         self._colour_option.hide()
         self._regions: _tuple[utils.ScanRegion, ...] = ()
         self._grids = grids
         self._image = image
         self._marker = marker
+        self._done = done
         self._clusters = _cluster_image
         self._pipeline = _pipeline_image
         self._survey = _survey_image
@@ -179,16 +295,18 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._i = 0
         self._logger: _None[logging.Logger] = None
 
-        self._scan_mode = utils.LabelledWidget("Merlin Scan Mode", utils.CheckBox("&M", True), utils.LabelOrder.SUFFIX)
+        self._scan_mode = utils.LabelledWidget("Merlin Scan Mode", utils.CheckBox("&M", default_settings["scan_mode"]),
+                                               utils.LabelOrder.SUFFIX)
         self._scan_mode.focus.dataPassed.connect(lambda v: self.settingChanged.emit("scan_mode", v))
+        self._scan_mode.focus.dataPassed.connect(self._popup.new_merlin_state)
         self._scan_mode.focus.dataFailed.connect(failure_action)
         self._session = utils.LabelledWidget("Session",
-                                             utils.Entry("", validation.examples.save_path),
+                                             utils.Entry(default_settings["session"], validation.examples.save_path),
                                              utils.LabelOrder.SUFFIX)
         self._session.focus.dataPassed.connect(lambda v: self.settingChanged.emit("session", v))
         self._session.focus.dataFailed.connect(failure_action)
         self._sample = utils.LabelledWidget("Sample",
-                                            utils.Entry("", validation.examples.save_path),
+                                            utils.Entry(default_settings["sample"], validation.examples.save_path),
                                             utils.LabelOrder.SUFFIX)
         self._sample.focus.dataPassed.connect(lambda v: self.settingChanged.emit("sample", v))
         self._sample.focus.dataFailed.connect(failure_action)
@@ -208,7 +326,19 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._mic = mic
         self._scanner = scanner
 
-        self._resolution = 4096  # 16384
+        self._resolution = default_settings["scan_resolution"]
+
+    def _img(self, img: images.RGBImage) -> np.ndarray:
+        w, h = self._canvas.image_size
+        arr = np.zeros((h, w, 3))
+        normalised = img.norm().data()
+        r_mask = np.nonzero((normalised >= 0) & (normalised < 2 ** 8))
+        g_mask = np.nonzero((normalised >= 2 ** 8) & (normalised < 2 ** 16))
+        b_mask = np.nonzero((normalised >= 2 ** 16) & (normalised < 2 ** 24))
+        arr[(*r_mask, 0)] = normalised[r_mask]
+        arr[(*g_mask, 1)] = normalised[g_mask]
+        arr[(*b_mask, 2)] = normalised[b_mask]
+        return arr
 
     def clear(self):
         CanvasPage.clear(self)
@@ -230,19 +360,48 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         return "search"
 
     def update_resolution(self, new: int):
+        """
+        Update the resolution of the scan.
+
+        Parameters
+        ----------
+        new: int
+            The new scan resolution.
+        """
         self._resolution = new
 
     def update_grids(self, x_shift: int, y_shift: int):
+        """
+        Move all the scan regions, linked to drift correction.
+
+        Parameters
+        ----------
+        x_shift: int
+            The number of pixels to horizontally shift the scan regions.
+        y_shift: int
+            The number of pixels to vertically shift the scan regions.
+        """
         msg = f"Shifting all squares by {x_shift, y_shift}"
         if self._logger is None:
             print(msg)
         else:
             self._logger.debug(msg)
-        lim = self._canvas.data_size[0]
+        lim = self._canvas.image_size[0]
         for grid in self._regions:
             grid.move((x_shift, y_shift))
             grid.disabled = (any(c < 0 for c in grid[Corners.TOP_LEFT]) or
                              any(c > lim for c in grid[Corners.BOTTOM_RIGHT]))
+        self._image.run()
+        self._draw_images()
+
+    def _draw_images(self):
+        self._modified_image = self._image.original.copy()
+        for grid in self._regions[:self._i]:
+            grid.draw(self._modified_image, self._done)
+        for grid in self._regions[self._i:]:
+            grid.draw(self._modified_image, 2 ** 24 - 1 - self._marker)
+        self._canvas.draw(self._modified_image)
+        self._original_image = self._modified_image.copy()
 
     @utils.Tracked
     def run(self):
@@ -251,13 +410,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._regions = self._grids.get_tight()
         if not self._regions:
             raise StagingError("grid search", "exporting tightened grids")
-        self.runStart.emit()
         self._progress.setMaximum(len(self._regions))
-        self._modified_image = self._image.original.copy()
-        for grid in self._regions[self._i:]:
-            grid.draw(self._modified_image, 2 ** 24 - 1 - self._marker)
-        self._canvas.draw(self._modified_image)
-        self._original_image = self._modified_image.copy()
+        self.runStart.emit()
+        self._draw_images()
         if self._automate:
             self._run.py_func(None)
         elif microscope.ONLINE:
@@ -281,7 +436,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 clear.clear()
             with h5py.File(params, "a") as f:
                 if images_saved & utils.Stages.MARKER:
-                    f.create_dataset("Grid Marker", data=self._modified_image.data.reference())
+                    f.create_dataset("Grid Marker", data=self._img(self._modified_image))
                 if images_saved & utils.Stages.CLUSTERS:
                     f.create_dataset("Clusters Found", data=self._clusters())
                 if images_saved & utils.Stages.PROCESSED:
@@ -290,42 +445,19 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Survey Scan", data=self._survey())
 
         def _merlin_scan():
-            merlin_cmd = microscope.merlin_connection.MERLIN_connection(hostname)
-            print('*****3*****')
-            # <editor-fold desc="Merlin config">
-            merlin_cmd.setValue('NUMFRAMESTOACQUIRE', pixels)
-            merlin_cmd.setValue('COUNTERDEPTH', bit_depth)
-            merlin_cmd.setValue('CONTINUOUSRW', 1)
-            merlin_cmd.setValue('ACQUISITIONTIME', (exposure / 2e3))
-            merlin_cmd.setValue('FILEDIRECTORY', save_path)
             merlin_cmd.setValue('FILENAME', f"{stamp}_data")
-            merlin_cmd.setValue('FILEENABLE', 1)
-            # trigger set up and filesaving
             merlin_cmd.setValue('TRIGGERSTART', 1)
             merlin_cmd.setValue('TRIGGERSTOP', 1)
-            merlin_cmd.setValue('SAVEALLTOFILE', 1)
-            merlin_cmd.setValue('USETIMESTAMPING', 0)
-            # setting up VDF with STEM mode
-            merlin_cmd.setValue('SCANX', px_val)
-            merlin_cmd.setValue('SCANY', px_val)
-            #        # set to pixel trigger
-            merlin_cmd.setValue('SCANTRIGGERMODE', 0)
-            merlin_cmd.setValue('SCANDETECTOR1ENABLE', 1)
-            # Standard ADF det
-            merlin_cmd.setValue('SCANDETECTOR1TYPE', 0)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 255)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 255)
-            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 50)
-            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 150)
-            # </editor-fold>
-            print('**5**')
+            time.sleep(1)
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
                 self._scanner.scan(return_=False)
-                del merlin_cmd
                 time.sleep(0.001)
+                merlin_cmd.setValue('TRIGGERSTART', 0)
+                merlin_cmd.setValue('TRIGGERSTOP', 0)
+                time.sleep(1)
 
         if current is None:
             current = -1
@@ -347,6 +479,32 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         if microscope.ONLINE:
             self._scanner.scan_area = microscope.FullScan((self._resolution, self._resolution))
             self._scanner.dwell_time = exposure  # add pattern
+            hostname = "10.182.0.5"
+            merlin_cmd = microscope.merlin_connection.MERLIN_connection(hostname)
+            print('Setup')
+            # <editor-fold desc="Merlin config">
+            merlin_cmd.setValue('NUMFRAMESTOACQUIRE', pixels)
+            merlin_cmd.setValue('COUNTERDEPTH', bit_depth)
+            merlin_cmd.setValue('CONTINUOUSRW', 1)
+            merlin_cmd.setValue('ACQUISITIONTIME', (exposure / 2e3))
+            merlin_cmd.setValue('FILEDIRECTORY', save_path)
+            merlin_cmd.setValue('FILEENABLE', 1)
+            # trigger set up and filesaving
+            merlin_cmd.setValue('SAVEALLTOFILE', 1)
+            merlin_cmd.setValue('USETIMESTAMPING', 0)
+            # setting up VDF with STEM mode
+            merlin_cmd.setValue('SCANX', px_val)
+            merlin_cmd.setValue('SCANY', px_val)
+            #        # set to pixel trigger
+            merlin_cmd.setValue('SCANTRIGGERMODE', 0)
+            merlin_cmd.setValue('SCANDETECTOR1ENABLE', 1)
+            # Standard ADF det
+            merlin_cmd.setValue('SCANDETECTOR1TYPE', 0)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 255)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 255)
+            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 50)
+            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 150)
+            # </editor-fold>
 
         original = self._original_image.data()
         for i, region in enumerate(self._regions):
@@ -366,8 +524,8 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
             with self._canvas as draw:
                 draw.data.reference()[:, :] = original.copy()
-                region.draw(draw, self._marker, filled=True)
-                region.draw(self._original_image, self._marker)
+                region.draw(draw, self._marker)
+                region.draw(self._original_image, self._done)
                 if not microscope.ONLINE:
                     time.sleep(0.5)
 
@@ -390,7 +548,6 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         if not do_merlin:
                             _reg_scan()
                         else:
-                            hostname = "10.182.0.5"
                             print(params)
                         _file_write()
                         if do_merlin:
@@ -412,8 +569,12 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         with self._canvas as draw:
             draw.data.reference()[:, :] = original.copy()
         self.runEnd.emit()
+        self.clear()
 
     def automate(self):
+        """
+        Perform an automated, single-threaded run.
+        """
         self._automate = True
         try:
             self.run.py_func()

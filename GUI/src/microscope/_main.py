@@ -13,6 +13,26 @@ else:
 
 
 class SubSystems(typing.TypedDict):
+    """
+    A typed dictionary representing the various subsystems of the main controller.
+
+    Stage: Stage
+        The controller for the stage.
+    Lenses: Lens
+        The controller for the lenses.
+    Gun: Gun
+        The controller for the gun.
+    FEG: Feg
+        The controller for the FEG system.
+    EOS: Eos
+        The controller for the EOS system.
+    Detectors: Detector
+        The controller for the detectors.
+    Deflectors: Deflector
+        The controller for the deflectors.
+    Apertures: Aperture
+        The controller for the apertures.
+    """
     Stage: controllers.Stage
     Lenses: controllers.Lens
     Gun: controllers.Gun
@@ -24,9 +44,50 @@ class SubSystems(typing.TypedDict):
 
 
 class Controller(Base):
+    """
+    Main microscope controller. Has few keys but links to all other subsystems.
+
+    Keys
+    ----
+    merlin_camera_length: float (read-only)
+        The length of the merlin camera.
+    field_of_view: float (read-only)
+        The current field of view for the microscope.
+    defocus_per_bit: float (read-only)
+        The current defocus per bit for the microscope - this is based on the acceleration voltage.
+    defocus: float (read-only)
+        The current defocus for the microscope - based on the per-bit defocus and the zero defocus.
+    convergence: float (read-only)
+        The convergence semi-angle.
+
+    Attributes
+    ----------
+    _systems: SubSystems
+        A dictionary mapping the relevant system name to the correct sub-controller.
+    _zdf: int
+        The zero defocus value.
+    _ht: HT3
+        The controller for the acceleration voltage.
+    _scan: Scan3
+        The controller for the scan coils.
+    _eos: EOS3
+        The controller for the EOS system - note that this is the raw PyJEM controller.
+    _gun: GUN3
+        The controller for the gun system - note that this is the raw PyJEM controller.
+    _def: Def3
+        The controller for the deflector system - note that this is the raw PyJEM controller.
+    """
 
     @Key
     def merlin_camera_length(self) -> float:
+        """
+        The merlin camera length.
+
+        Returns
+        -------
+        float
+            The length of the merlin camera.
+        """
         ht = self._ht.GetHtValue()
         cam = self._systems["EOS"].magnification
         if ht == 80:
@@ -39,11 +100,27 @@ class Controller(Base):
 
     @Key
     def field_of_view(self) -> float:
+        """
+        Determine the FOV of the camera.
+
+        Returns
+        -------
+        float
+            The current field of view for the microscope.
+        """
         inv_mag = 20_000 / self._systems["EOS"].magnification
         return 10e-6 * inv_mag
 
     @Key
     def defocus_per_bit(self) -> float:
+        """
+        The per-bit defocus for the microscope based on acceleration voltage.
+
+        Returns
+        -------
+        float
+            The current defocus per bit for the microscope - this is based on the acceleration voltage.
+        """
         ht = self._ht.GetHtValue()
         # <editor-fold desc="HT decider block">
         if ht == 300_000:
@@ -64,12 +141,28 @@ class Controller(Base):
 
     @Key
     def defocus(self) -> float:
+        """
+        Calculate the total defocus.
+
+        Returns
+        -------
+        float
+            The current defocus for the microscope - based on the per-bit defocus and the zero defocus.
+        """
         lenses = self._systems["Lenses"]
         with lenses.switch_lens(Lens.OL_FINE):
             return self.defocus_per_bit * (lenses.value - self._zdf)
 
     @Key
     def convergence(self) -> float:
+        """
+        Calculate the convergence of the system based on the acceleration voltage.
+
+        Returns
+        -------
+        float
+            The convergence semi-angle.
+        """
         ht = self._ht.GetHtValue()
         apt = self._systems["Apertures"]
         ty = apt.current.value
@@ -127,6 +220,14 @@ class Controller(Base):
 
     @property
     def subsystems(self) -> SubSystems:
+        """
+        Public access to the subsystems of the microscope.
+
+        Returns
+        -------
+        SubSystems
+            A dictionary mapping the relevant system name to the correct sub-controller.
+        """
         return self._systems.copy()
 
     def __init__(self, detector: Detector, inserted: bool, lens: Lens, axis: Axis, /, zdf=38942, *,
@@ -151,6 +252,18 @@ class Controller(Base):
         self._def = Def3()
 
     def export(self, file: str, scan_size: int, **merlin):
+        """
+        Export the microscope parameters to a hdf5 file.
+
+        Parameters
+        ----------
+        file: str
+            The complete filepath.
+        scan_size: int
+            The size of the scan.
+        **merlin: Any
+            The additional merlin parameters.
+        """
         with h5py.File(file, "a") as f:
             if not ONLINE:
                 return
@@ -166,7 +279,7 @@ class Controller(Base):
             metadata_group['magnification'] = local_mag
             metadata_group['nominal_scan_rotation'] = self._scan.GetRotationAngle()
             metadata_group['ht_value(V)'] = local_ht
-            metadata_group['nominal_camera_length(m)'] = self._systems["EOS"].magnification * 1e-3
+            metadata_group['nominal_camera_length(m)'] = self._systems["EOS"].camera_length * 1e-3
             metadata_group['merlin_camera_length(m)'] = self.merlin_camera_length
             metadata_group['spot_size'] = self._eos.GetSpotSize()
             metadata_group['aperture_size'] = self._systems["Apertures"].size

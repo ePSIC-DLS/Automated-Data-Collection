@@ -25,13 +25,13 @@ class DiffractionFilter(ProcessPage, SettingsPage):
         self._regular.addWidget(self._in_path)
         self._regular.addWidget(self._out_path)
         self._in_path.focus.setEnabled(False)
-        self._in_path.focus.dialog().openFile.connect(self._open)
+        self._in_path.focus.dialog().openFile.connect(self._display_popup)
         self.fileExecuted.connect(self._read)
         self.setLayout(self._layout)
         self._automate = False
 
     @utils.Thread.decorate(manager=ProcessPage.MANAGER)
-    def _open(self, path: str):
+    def _display_popup(self, path: str):
         with open(path) as code:
             exec(code.read(), {}, {})
         self.fileExecuted.emit(os.path.dirname(path))
@@ -39,6 +39,8 @@ class DiffractionFilter(ProcessPage, SettingsPage):
     def _read(self, path: str):
         with open(path) as input_json:
             print(json.load(input_json))
+            # emit a signal for valid clusters?
+        self.runEnd.emit()
 
     def clear(self):
         ProcessPage.clear(self)
@@ -67,9 +69,13 @@ class DiffractionFilter(ProcessPage, SettingsPage):
             self._search.py_func(None)
 
     @utils.Stoppable.decorate(manager=ProcessPage.MANAGER)
+    @utils.Tracked
     def _search(self, progress: typing.Optional[int]):
+        path = self._out_path.focus.file_path()
+        if not path:
+            raise StagingError("run data analysis filters", "choosing output path")
         self._in_path.setEnabled(True)
-        self.runEnd.emit()
+        # merlin code
 
     def automate(self):
         self._automate = True

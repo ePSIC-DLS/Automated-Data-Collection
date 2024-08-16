@@ -12,6 +12,32 @@ from ....microscope import ScanType, ONLINE, FullScan, Scanner
 
 
 class SurveyImage(ClusterPage, SettingsPage):
+    """
+    Concrete page representing the initial scan - the image that surveys the scene.
+
+    Signals
+    -------
+    driftRegion: tuple[int, int], tuple[int, int]
+        The position of the region highlighted as the reference for drift correction.
+
+    Attributes
+    ----------
+    _polygon: list[tuple[int, int]]
+        The vertices of the cluster being formed.
+    _polygon_mode: LabelledWidget[QCheckBox]
+        The widget deciding whether interacting with the canvas forms a cluster.
+    _drift_size: LabelledWidget[ComboBox[int]]
+        The widget controlling the size of the drift region.
+    _export: QPushButton
+        The button to export the reference image.
+    _co_ords: tuple[int, int, int, int]
+        The rectangle forming the drift reference image. It is in the form (x1, y1, x2, y2).
+    _scanner: Scanner
+        The scan-engine used for scanning.
+    _scan: Callable[[ScanType, bool], GreyImage]
+        The function that performs the scan - this is the GUI's version of a scan (nominally uses the scan-engine
+        internally with some fields configured).
+    """
     settingChanged = SettingsPage.settingChanged
     driftRegion = core.pyqtSignal(tuple, tuple)
 
@@ -33,10 +59,10 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._polygon_mode = utils.LabelledWidget("ROI Drawing Mode", widgets.QCheckBox("&R"), utils.LabelOrder.SUFFIX)
         self._polygon_mode.focus.stateChanged.connect(_reset)
 
-        self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(8, 16, 32, 64),
+        self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(16, 32, 64),
                                                 utils.LabelOrder.SUFFIX)
         self._export = widgets.QPushButton("Export region")
-        self._co_ords: _tuple[int, int, int, int] = (0, 0, 0, 0)
+        self._co_ords = (0, 0, 0, 0)
         self._export.clicked.connect(lambda: self._region_export())
 
         self._regular.addWidget(self._polygon_mode)
@@ -63,12 +89,9 @@ class SurveyImage(ClusterPage, SettingsPage):
         if self._state != utils.StoppableStatus.ACTIVE:
             return
         self.runStart.emit()
-        if ONLINE:
-            region = FullScan(self._canvas.image_size)
-            self._scanner.scan_area = region
-            self._modified_image = self._scan(region, True).promote()
-        else:
-            self._modified_image = images.RGBImage.from_file("./assets/img_3.bmp", do_static=True)
+        region = FullScan(self._canvas.image_size)
+        self._scanner.scan_area = region
+        self._modified_image = self._scan(region, True).norm().dynamic().promote()
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
         self.runEnd.emit()
@@ -112,7 +135,7 @@ class SurveyImage(ClusterPage, SettingsPage):
             left, top = x - size // 2, y - size // 2
             right, bottom = x + size // 2, y + size // 2
             try:
-                self._modified_image.drawings.rect.from_corners(
+                self._modified_image.drawings.rect.corners(
                     (left, top), (right, bottom), self._cluster_colour, fill=None)
             except IndexError as err:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Drift Region Error", str(err))
@@ -143,7 +166,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         yield from ()
 
     def help(self) -> str:
-        s = """This is the survey image - it represents an initial image to threshold and segment.
+        s = f"""This is the survey image - it represents an initial image to threshold and segment.
         On the survey image, arbitrary polygons can be made and managed in the cluster manager
 
         Settings
@@ -151,6 +174,13 @@ class SurveyImage(ClusterPage, SettingsPage):
         ROI Drawing Mode
             No validation.
 
-            Enables the Region Of Interest Drawing Mode, where left-clicking the canvas will create a vertex, and
-            right-clicking will complete the ROI polygon."""
+            Enables the Region Of Interest Drawing Mode, where left-clicking the canvas will create a vertex;
+            and right-clicking will complete the ROI polygon.
+        Drift Region
+            {self._drift_size.focus.validation_pipe()}
+            
+            The size of the region to export as a reference image for drift correction.
+            Note the resulting image is square and therefore this is both the width and the height.
+            
+            To actually export the region, use the export button."""
         return s

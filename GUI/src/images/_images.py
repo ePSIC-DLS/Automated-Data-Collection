@@ -77,7 +77,7 @@ class RGBImage(RGB, MultiModal):
         if arr is None:
             raise FileNotFoundError(f"File {path!r} not found")
         arr = np.uint32(arr)
-        r = arr[:, :, 1] << 16
+        r = arr[:, :, 2] << 16
         g = arr[:, :, 1] << 8
         b = arr[:, :, 0]
         return cls((r | g | b).astype(np.int_), static_range=(0, 2 ** 24 - 1) if do_static else None)

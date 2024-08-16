@@ -8,10 +8,26 @@ from ._02_thresholding import ProcessingPipeline
 from ... import utils
 from ..._base import ClusterPage, SettingsPage, ProcessPage, widgets, images, core
 from ..._errors import *
-from .... import validation
+from .... import load_settings, validation
 
 
 class AlgorithmDict(utils.SettingsDict):
+    """
+    Typed dictionary representing the advanced clustering settings.
+
+    Keys
+    ----
+    algorithm: ComboBox[str]
+        The distance metric used.
+    square: QCheckBox
+        Whether to use a square distance metric (only available for Euclidean distance)
+    power: Spinbox
+        What p-factor to use (only available for Minkowski distance)
+    size: SizeControl
+        The size to check clusters against.
+    size_match: Enum[Match]
+        How to compare the clusters against the size.
+    """
     algorithm: utils.ComboBox[str]
     square: widgets.QCheckBox
     power: utils.Spinbox
@@ -19,7 +35,34 @@ class AlgorithmDict(utils.SettingsDict):
     size_match: utils.Enum[utils.Match]
 
 
+default_settings = load_settings("assets/config.json",
+                                 algorithm=validation.examples.distance_algorithm,
+                                 square=validation.examples.any_bool,
+                                 power=validation.examples.power,
+                                 cluster_size=validation.examples.size,
+                                 size_match=validation.examples.numerical_match,
+                                 epsilon=validation.examples.epsilon,
+                                 minimum_samples=validation.examples.minimum_samples,
+                                 )
+
+
 class Algorithm(utils.SettingsPopup):
+    """
+    Concrete popup representing the advanced clustering settings.
+
+    Attributes
+    ----------
+    _algorithm: ComboBox[str]
+        The widget controlling the distance metric.
+    _square: QCheckBox
+        The widget controlling the square distance metric.
+    _power: Spinbox
+        The widget controlling the p-factor.
+    _match_mode: Enum[Match]
+        The widget controlling the comparison mode.
+    _size: SizeControl
+        The widget controlling the size.
+    """
 
     def __init__(self, failure_action: typing.Callable[[Exception], None]):
         super().__init__()
@@ -32,17 +75,18 @@ class Algorithm(utils.SettingsPopup):
             elif text == "Minkowski":
                 self._power.setEnabled(True)
 
-        self._algorithm = utils.ComboBox("Manhattan", "Euclidean", "Minkowski", start_i=1)
+        alg_choice = ("Manhattan", "Euclidean", "Minkowski").index(default_settings["algorithm"])
+        self._algorithm = utils.ComboBox("Manhattan", "Euclidean", "Minkowski", start_i=alg_choice)
         self._algorithm.dataPassed.connect(_change)
         self._algorithm.dataPassed.connect(lambda v: self.settingChanged.emit("algorithm", v))
 
-        self._square = utils.CheckBox("", False)
+        self._square = utils.CheckBox("", default_settings["square"])
         self._square.dataPassed.connect(lambda v: self.settingChanged.emit("square", v))
-        self._power = utils.Spinbox(3, 1, validation.examples.power)
+        self._power = utils.Spinbox(default_settings["power"], 1, validation.examples.power)
         self._power.dataPassed.connect(lambda v: self.settingChanged.emit("power", v))
-        self._match_mode = utils.Enum(utils.Match, utils.Match.NO_LOWER)
+        self._match_mode = utils.Enum(utils.Match, utils.Match[default_settings["size_match"]])
         self._match_mode.dataPassed.connect(lambda v: self.settingChanged.emit("match", v))
-        self._size = utils.SizeControl(15, 1, validation.examples.size)
+        self._size = utils.SizeControl(default_settings["cluster_size"], 1, validation.examples.size)
         self._size.dataPassed.connect(lambda v: self.settingChanged.emit("size", v))
 
         self._layout.addWidget(utils.DoubleLabelledWidget("Distance Algorithm", self._algorithm,
@@ -66,7 +110,7 @@ class Algorithm(utils.SettingsPopup):
         self._match_mode.dataPassed.connect(lambda v: self.settingChanged.emit("size_match", v))
         self._match_mode.dataFailed.connect(failure_action)
 
-        _change("Euclidean")
+        _change(default_settings["algorithm"])
 
     def widgets(self) -> AlgorithmDict:
         return {"algorithm": self._algorithm, "square": self._square, "power": self._power, "size": self._size,
@@ -74,6 +118,29 @@ class Algorithm(utils.SettingsPopup):
 
 
 class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
+    """
+    Concrete page representing the identification of clusters from a binary image.
+
+    Attributes
+    ----------
+    _prev: ProcessingPipeline
+        The previous stage in the pipeline, used to check whether a processed image is binary.
+    _DBSCAN_clusters: ndarray | None
+        The identified clusters from a binary image.
+    _DBSCAN_regions: ndarray
+        An array-form of the image representing the identified clusters.
+    _epsilon: LabelledWidget[Spinbox]
+        The widget controlling the 'epsilon' parameter (defined in the help text).
+    _samples: LabelledWidget[Spinbox]
+        The widget controlling the 'min_samples' parameter (defined in the help text).
+    _progress: QProgressBar
+        The widget representing the ratio of formed clusters to identified clusters (as formation of clusters involves
+        working with bimodal images, which can introduce an overhead).
+    _minimum_samples: LabelledWidget[Spinbox]
+        An alias for `_samples` so that the attached DSL's variable namepsace is clearer.
+    _automate: bool
+        Whether to run an automated cluster process, which is single-threaded.
+    """
     clusterFound = ClusterPage.clusterFound
     settingChanged = SettingsPage.settingChanged
     _newMax = core.pyqtSignal(int)
@@ -90,11 +157,13 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         self._DBSCAN_regions: typing.Optional[np.ndarray] = None
 
         self._epsilon = utils.LabelledWidget("Epsilon",
-                                             utils.Spinbox(4.2, 0.01, validation.examples.epsilon,
+                                             utils.Spinbox(default_settings["epsilon"], 0.01,
+                                                           validation.examples.epsilon,
                                                            mode=utils.RoundingMode.DECIMAL),
                                              utils.LabelOrder.SUFFIX)
         self._samples = utils.LabelledWidget("Minimum Samples",
-                                             utils.Spinbox(50, 1, validation.examples.minimum_samples),
+                                             utils.Spinbox(default_settings["minimum_samples"], 1,
+                                                           validation.examples.minimum_samples),
                                              utils.LabelOrder.SUFFIX)
         self._progress = widgets.QProgressBar()
         self._progress.setRange(0, 0)
@@ -137,34 +206,6 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
     def compile(self) -> str:
         return "Cluster"
 
-    # @utils.Tracked
-    def chosen_cluster(self, radius: int) -> utils.Cluster:
-        x_lim, y_lim = self._canvas.image_size
-        for cluster in self._clusters:
-            sx, sy = cluster[images.AABBCorner.TOP_LEFT]
-            ex, ey = cluster[images.AABBCorner.BOTTOM_RIGHT]
-            left_most = max(sx - radius, 0)
-            right_most = min(ex + radius, x_lim)
-            top_most = max(sy - radius, 0)
-            bottom_most = min(ey + radius, y_lim)
-            left_edge = sx - 1
-            right_edge = ex + 1
-            top_edge = sy - 1
-            bottom_edge = ey + 1
-            if left_edge < 0 or top_edge < 0 or right_edge > x_lim or bottom_edge > y_lim:
-                continue
-            left_radius = self._modified_image.region((left_most, top_most), (left_edge, bottom_most))
-            right_radius = self._modified_image.region((right_edge, top_most), (right_most, bottom_most))
-            top_radius = self._modified_image.region((left_most, top_most), (right_most, top_edge))
-            bottom_radius = self._modified_image.region((left_most, bottom_edge), (right_most, bottom_most))
-            if not left_radius and not right_radius and not top_radius and not bottom_radius:
-                chosen = cluster
-                break
-        else:
-            raise GUIError(utils.ErrorSeverity.WARNING, "No valid cluster",
-                           f"There is no cluster with {radius} pixels of padding around itself")
-        return chosen
-
     @utils.Tracked
     def run(self):
         if self._state != utils.StoppableStatus.ACTIVE:
@@ -174,7 +215,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
             raise StagingError("segmentation", "pre-processing")
         try:
             img.demote().norm().downchannel(0, 255)
-        except TypeError as err:
+        except TypeError:
             raise GUIError(utils.ErrorSeverity.WARNING, "Incomplete processing",
                            "Pre-processing must end with a binary image. Try adding a 'threshold' or an 'edge' process")
         self._canvas.draw(images.RGBImage.blank(self._canvas.image_size))
@@ -203,10 +244,7 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         clusters = scan.fit_predict(white_mask) + 1
         regions[indices] = clusters
 
-        if (largest := np.max(clusters)) > 765:
-            raise GUIError(utils.ErrorSeverity.INFO, "Too many clusters",
-                           f"Found {largest} clusters, which overflows the colour space (expected 765 or less)")
-        elif largest == 0:
+        if (largest := np.max(clusters)) == 0:
             self._newMax.emit(1)
             self._newVal.emit(1)
             return
@@ -263,6 +301,9 @@ class Clusters(ClusterPage, SettingsPage[Algorithm], ProcessPage):
         self.runEnd.emit()
 
     def automate(self):
+        """
+        Perform an automated, single-threaded clustering process.
+        """
         self._automate = True
         try:
             self.run.py_func()

@@ -6,8 +6,88 @@ from typing import Tuple as _tuple
 
 if ONLINE:
     from PyJEM.TEM3 import Apt3
-else:
-    from ..PyJEM.offline.TEM3 import Apt3
+
+
+class Apt3Offline:
+    """
+    Placeholder class to represent an offline connection to the apertures.
+    """
+
+    def GetExpKind(self) -> int:
+        """
+        Get the expected kind of the aperture.
+
+        Returns
+        -------
+        int
+            The code for the aperture.
+        """
+        return 0
+
+    def SelectExpKind(self, value: int):
+        """
+        Set the expected kind of the aperture.
+
+        Parameters
+        ----------
+        value: int
+            The code for the aperture.
+        """
+        pass
+
+    def GetPosition(self) -> _tuple[int, int]:
+        """
+        Get the position of the aperture.
+
+        Returns
+        -------
+        tuple[int, int]
+            The position for the aperture.
+        """
+        return 0, 0
+
+    def SetPosition(self, x: int, y: int):
+        """
+        Set the position of the aperture.
+
+        Parameters
+        ----------
+        x: int
+            The horizontal aperture position.
+        y: int
+            The vertical aperture position.
+        """
+        pass
+
+    def GetExpSize(self, for_: int) -> int:
+        """
+        Get the expected size of the aperture.
+
+        Parameters
+        ----------
+        for_: int
+            The code for the aperture.
+
+        Returns
+        -------
+        int
+            The aperture's size.
+        """
+        return 0
+
+    def SetExpSize(self, for_: int, size: int):
+        """
+        Set the expected size of the aperture.
+
+        Parameters
+        ----------
+        for_: int
+            The code for the aperture.
+        size: int
+            The aperture's size.
+        """
+        pass
+
 
 apt_kind = validation.Pipeline.enum(AptKind)
 
@@ -36,7 +116,8 @@ class Controller(Base):
         AptKind
             The current aperture kind.
         """
-        return AptKind(self._controller.GetExpKind())
+        code = self._controller.GetExpKind()
+        return AptKind(code)
 
     @current.setter
     def current(self, kind: AptKind):
@@ -81,7 +162,7 @@ class Controller(Base):
 
     def __init__(self, starting: AptKind = None):
         super().__init__("Apertures")
-        self._controller = Apt3()
+        self._controller = Apt3Offline()
         if starting is not None:
             self.current = starting
         _ = self.current, self.position, self.size  # this will prime the keys with an instance

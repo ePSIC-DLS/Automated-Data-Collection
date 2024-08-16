@@ -7,20 +7,52 @@ from PyQt5.QtCore import Qt as enums
 from ..pipeline import SurveyImage
 from ... import utils
 from ..._base import CanvasPage, gui, SettingsPage, widgets
-from .... import validation
+from .... import load_settings, validation
+
+default_settings = load_settings("assets/config.json",
+                                 minima=validation.examples.hist_colours,
+                                 maxima=validation.examples.hist_colours,
+                                 num_groups=validation.examples.colours
+                                 )
 
 
 class Histogram(CanvasPage, SettingsPage):
+    """
+    Concrete page representing a colour count of the survey image.
+
+    There are two controls on the histogram, represented as two vertical lines. They are both draggable, with the
+    leftmost one being the minima value, and the rightmost one being the maximum value.
+
+    Attributes
+    ----------
+    _minima: QLabel
+        Widget to display the minima value.
+    _maxima: QLabel
+        Widget to display the maxima value.
+    _min_val: int
+        The minima value.
+    _max_val: int
+        The maxima value.
+    _num_groups: LabelledWidget[Spinbox]
+        The widget controlling the number of histogram bins.
+    _src: SurveyImage
+        The creator of the survey image. Note that the histogram triggers this page when it is triggered.
+    _colour: int_
+        The outline colour of the histogram bins.
+    _greys: dict[int, tuple[int, int]]
+        The mapping of rightmost edge to start and end intensities.
+    """
     settingChanged = SettingsPage.settingChanged
 
     def __init__(self, size: int, prev: SurveyImage, outline: np.int_,
                  failure_action: typing.Callable[[Exception], None]):
         CanvasPage.__init__(self, size, movement_handler=self._drag)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
-        self._minima = widgets.QLabel("Minima: 30")
-        self._maxima = widgets.QLabel("Maxima: 60")
-        self._min_val, self._max_val = 30, 60
-        self._num_groups = utils.LabelledWidget("Colour Groups", utils.Spinbox(17, 1, validation.examples.colours),
+        self._min_val, self._max_val = default_settings["minima"], default_settings["maxima"]
+        self._minima = widgets.QLabel(f"Minima: {self._min_val}")
+        self._maxima = widgets.QLabel(f"Maxima: {self._max_val}")
+        self._num_groups = utils.LabelledWidget("Colour Groups", utils.Spinbox(default_settings["num_groups"], 1,
+                                                                               validation.examples.colours),
                                                 utils.LabelOrder.SUFFIX)
         self._num_groups.focus.dataPassed.connect(lambda v: self.settingChanged.emit("num_groups", v))
         self._num_groups.focus.dataPassed.connect(lambda _: self._hist())
@@ -78,6 +110,14 @@ class Histogram(CanvasPage, SettingsPage):
         self._max_line()
 
     def update_min(self, line: int):
+        """
+        Publicly edit the minima line.
+
+        Parameters
+        ----------
+        line: int
+            The new minima value.
+        """
         self._min_val = line
         if self._modified_image is None:
             return
@@ -86,6 +126,14 @@ class Histogram(CanvasPage, SettingsPage):
         self._max_line(False)
 
     def update_max(self, line: int):
+        """
+        Publicly edit the maxima line.
+
+        Parameters
+        ----------
+        line: int
+            The new maxima value.
+        """
         self._max_val = line
         if self._modified_image is None:
             return
@@ -119,9 +167,9 @@ class Histogram(CanvasPage, SettingsPage):
         colour = int((x_pos / self._canvas.image_size[0]) * 255)
         btns = int(event.buttons())
         if btns == enums.LeftButton:
-            self._min_val = colour
+            self._min_val = self._min_val = min(self._max_val - 1, max(colour, 0))
         elif btns == enums.RightButton:
-            self._max_val = colour
+            self._max_val = min(255, max(colour, self._min_val + 1))
         elif btns == enums.MiddleButton:
             o_l, o_h = self._min_val, self._max_val
             line_gap = self._max_val - self._min_val
@@ -133,16 +181,15 @@ class Histogram(CanvasPage, SettingsPage):
         else:
             self._tooltip(event)
         for _ in range(2):
-            # do twice as drawing is little overhead, but the emitting twice will successfully update threshold values
             self._min_line()
             self._max_line()
 
     def _process_tooltip(self, x: int, y: int) -> typing.Iterator[str]:
         def _handle(colour: int) -> str:
+            hexa = f"{colour:06x}"
             if self._display_type == utils.ColourDisplay.HEX:
-                clr = f"#{colour:06x}"
+                clr = hexa
             else:
-                hexa = f"{colour:06x}"
                 clr = str((int(hexa[0:2], 16), int(hexa[2:4], 16), int(hexa[4:6], 16)))
             return clr
 

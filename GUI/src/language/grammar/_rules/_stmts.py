@@ -10,15 +10,9 @@ class StmtRule(_abc.ABC):
     """
     Abstract base class for all rules aren't expressions.
 
-    Generics
-    --------
-    _E: Expr
-        The expression type returned.
-
     Abstract Methods
     ----------------
     parse
-    get_precedence
     """
 
     @_abc.abstractmethod
@@ -32,11 +26,6 @@ class StmtRule(_abc.ABC):
             The consumer that can parse tokens.
         token: KeywordToken
             The previously consumed token.
-
-        Returns
-        -------
-        _E
-            The expression parsed from the token stream.
         """
         pass
 
@@ -53,6 +42,9 @@ class StmtRule(_abc.ABC):
 
 
 class VarDef(StmtRule):
+    """
+    Concrete rule for parsing variable declarations.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         var = self.parse_var(parser, "Expected variable name")
@@ -65,6 +57,21 @@ class VarDef(StmtRule):
 
     @classmethod
     def parse_var(cls, parser: Consumer, message: str) -> int:
+        """
+        Parse a variable name declaration.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The parser that can parse tokens.
+        message: str
+            The error message for if an identifier is not found.
+
+        Returns
+        -------
+        int
+            The named variable location. Will be zero for local variables.
+        """
         string = parser.consume(_t.IdentifierToken, message).src
         cls.dec_var(parser)
         if parser.compiler.scope_depth > 0:
@@ -73,6 +80,16 @@ class VarDef(StmtRule):
 
     @classmethod
     def def_var(cls, parser: Consumer, var: int):
+        """
+        Define a named variable. For global variables, this emits the `DEF_GLOBAL` instruction.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The parser that can parse tokens.
+        var: int
+            The variable location. This is unused when a local variable is found, which is instead marked as valid.
+        """
         if parser.compiler.scope_depth > 0:
             parser.compiler.mark()
             return
@@ -80,6 +97,14 @@ class VarDef(StmtRule):
 
     @classmethod
     def dec_var(cls, parser: Consumer):
+        """
+        Declare a local variable by checking for shadowing.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that can parse tokens.
+        """
         if parser.compiler.scope_depth == 0:
             return
         name = parser.peek(0)
@@ -93,10 +118,23 @@ class VarDef(StmtRule):
 
     @classmethod
     def add_local(cls, cmp: Compiler, name: _t.Token):
+        """
+        Static method for adding a local variable.
+
+        Parameters
+        ----------
+        cmp: Compiler
+            The compiler that stores local variables.
+        name: Token
+            The variable name.
+        """
         cmp.add_local(cmp.Local(name, -1))
 
 
 class LoopStmt(StmtRule):
+    """
+    Concrete rule for parsing c-style for loops.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         with parser.compiler:
@@ -126,6 +164,14 @@ class LoopStmt(StmtRule):
 
     @classmethod
     def init(cls, parser: Consumer):
+        """
+        Perform initial variable parsing of the for loop. This is for creating the local variable.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that can parse tokens.
+        """
         parser.consume(_t.KeywordToken, "Expected {filter} for the loop variable",
                        predicate=_p.KeywordPredicate(_t.KeywordType.VAR_DEF))
         var = VarDef.parse_var(parser, "Expected loop variable name")
@@ -135,6 +181,9 @@ class LoopStmt(StmtRule):
 
 
 class IterableStmt(StmtRule):
+    """
+    Concrete rule for parsing python-style for loops.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         with parser.compiler:
@@ -151,6 +200,11 @@ class IterableStmt(StmtRule):
 
 
 class FunctionStmt(StmtRule):
+    """
+    Concrete rule for parsing function declarations.
+
+    Note that in the language, functions can only be created in global scope.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         if parser.compiler.type != FuncType.SCRIPT:
@@ -166,6 +220,16 @@ class FunctionStmt(StmtRule):
 
     @classmethod
     def func(cls, parser: Consumer, ty: FuncType):
+        """
+        Open a new scope and parse the function's block of code.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that can parse tokens.
+        ty: FuncType
+            The type of the function.
+        """
         parser.compiler = Compiler(parser, ty, parser.compiler)
         parser.compiler.begin()
         parser.consume_type(_t.TokenType.START_CALL, "Expected {lookup} to start parameter definition")
@@ -181,6 +245,11 @@ class FunctionStmt(StmtRule):
 
 
 class IterDecl(StmtRule):
+    """
+    Concrete rule for parsing generator declarations.
+
+    Note that in the language, generators can only be created in global scope.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         if parser.compiler.type != FuncType.SCRIPT:
@@ -196,6 +265,11 @@ class IterDecl(StmtRule):
 
 
 class ReturnRule(StmtRule):
+    """
+    Concrete rule for parsing return statements.
+
+    Note that you can’t return from global scope.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         if parser.compiler.type == FuncType.SCRIPT:
@@ -210,6 +284,9 @@ class ReturnRule(StmtRule):
 
 
 class WaitRule(StmtRule):
+    """
+    Concrete rule for parsing sleep statements.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         parser.expr()
@@ -217,6 +294,9 @@ class WaitRule(StmtRule):
 
 
 class KeywordStmt(StmtRule):
+    """
+    Concrete rule for parsing keywords that represent statements.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         if token.keyword_type == _t.KeywordType.SURVEY:
@@ -234,6 +314,11 @@ class KeywordStmt(StmtRule):
 
 
 class EnumDecl(StmtRule):
+    """
+    Concrete rule for parsing enumeration declarations.
+
+    Note that in the langauge, enumerations can only be created in global scope.
+    """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken):
         if parser.compiler.type != FuncType.SCRIPT:

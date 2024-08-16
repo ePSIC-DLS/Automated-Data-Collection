@@ -1,5 +1,6 @@
 import abc
 import enum
+import math
 import typing
 
 try:
@@ -13,7 +14,7 @@ Enum = typing.TypeVar("Enum", bound=enum.Enum)
 
 __all__ = [
     "MemberTranslator", "BoolTranslator", "TypeTranslator", "KeyTranslator", "PropertyTranslator",
-    "FStringTranslator"
+    "FStringTranslator", "SubstitutionTranslator", "LogTranslator", "LengthTranslator", "BasedIntegerTranslator"
 ]
 
 
@@ -124,7 +125,7 @@ class IterableMixin(Mixin[Src, Dst], typing.Generic[Src, Dst]):
         Dst
             The translated element of the iterable.
         """
-        yield from map(self._t.translate, data)
+        return tuple(map(self._t.translate, data))
 
 
 class MemberTranslator(Base[str, Enum], typing.Generic[Enum]):
@@ -192,6 +193,11 @@ class MemberTranslator(Base[str, Enum], typing.Generic[Enum]):
 class BoolTranslator(Base[str, bool]):
     """
     A translator that specifically checks for a string being a valid boolean.
+
+    Bound Generics
+    --------------
+    Src: str
+    Dst: bool
     """
 
     @property
@@ -530,3 +536,106 @@ class SubstitutionTranslator(Base[str, str]):
             The formatted string.
         """
         return data.replace(self._field, self._r)
+
+
+class LogTranslator(Base[int, float]):
+    """
+    Translator for getting the log of an integer.
+
+    Bound Generics
+    --------------
+    Src: int
+    Dst: float
+
+    Attributes
+    ----------
+    NATURAL: int
+        The unique integer representing the natural logarithm.
+    _base: float
+        The base of the log.
+
+    Raises
+    ------
+    ValueError
+        If the base is negative or a floating point number.
+        Use `NATURAL` for a base of Euler's number.
+    """
+    NATURAL = -1
+
+    def __init__(self, base=NATURAL):
+        if (is_float := int(base) != base) or base <= 0:
+            if base != self.NATURAL or is_float:
+                raise ValueError(f"Invalid base {base}")
+            base = math.e
+        self._base = base
+
+    def __str__(self) -> str:
+        return f"log<{self._base}>(v)"
+
+    def translate(self, data: int) -> float:
+        """
+        Find the log of the input data in this object's base.
+
+        Parameters
+        ----------
+        data: int
+            The input data.
+
+        Returns
+        -------
+        float
+            The log of the data.
+        """
+        return math.log(data, self._base)
+
+
+class LengthTranslator(Base[typing.Sized, int]):
+    """
+    Translator for getting the length of a sized object.
+
+    Bound Generics
+    --------------
+    Src: Sized
+    Dst: int
+    """
+
+    def __str__(self) -> str:
+        return f"len(v)"
+
+    def translate(self, data: typing.Sized) -> int:
+        return len(data)
+
+
+class BasedIntegerTranslator(Base[str, int]):
+    """
+    Translator to translate a stringified integer literal of known base into the corresponding integer.
+
+    Bound Generics
+    --------------
+    Src: str
+    Dst: int
+
+    Attributes
+    ----------
+    _base: int
+        The base the literal is in.
+
+    Raises
+    ------
+    ValueError
+        If the base is not valid - note a valid base is a python constraint, defined as 2 - 36.
+    """
+
+    def __init__(self, base: int):
+        self._base = base
+        if base not in range(2, 37):
+            raise ValueError(f"Invalid base {base}. Should be between 2 and 36")
+
+    def __str__(self) -> str:
+        return f"int<{self._base}>(v)"
+
+    def translate(self, data: str) -> int:
+        try:
+            return int(data, self._base)
+        except ValueError as err:
+            raise Error(f"Cannot convert {data!r} to a base-{self._base} integer due to {err}") from None

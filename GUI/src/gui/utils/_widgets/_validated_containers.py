@@ -319,6 +319,33 @@ class PALFunction(widgets.QWidget):
 
 
 class Counter(widgets.QWidget):
+    """
+    Widget representing an adjustable limit with a controllable counter.
+
+    Signals
+    -------
+    needsReset:
+        Emitted when the counter is reset. Carries no data.
+    limitChanged: float
+        Emitted when the limit is successfully changed. Carries the new value as data.
+    limitFailure: Exception
+        Emitted when the limit fails to change. Carries the raised exception as data.
+
+    Attributes
+    ----------
+    _mode: Match
+        The numerical matching mode.
+    _curr: float
+        The current value of the counter.
+    _step: float
+        The uniform step of the counter.
+    _start: float
+        The starting value of the counter.
+    _current: QLabel
+        The displayed value of the current value.
+    _limit: Spinbox
+        The displayed limit.
+    """
     needsReset = core.pyqtSignal()
     limitChanged = core.pyqtSignal(float)
     limitFailure = core.pyqtSignal(Exception)
@@ -340,20 +367,37 @@ class Counter(widgets.QWidget):
         self.setLayout(layout)
 
     def increase(self):
+        """
+        Increase the counter by the fixed step.
+        """
         self.set_current(self._curr + self._step)
 
     def decrease(self):
+        """
+        Decrease the counter by the fixed step.
+        """
         self.set_current(self._curr - self._step)
 
     def set_current(self, new: float):
+        """
+        Sets the current value of the counter. Useful for non-fixed steps.
+
+        Parameters
+        ----------
+        new: float
+            The new value of the counter.
+        """
         self._curr = new
         self._current.setText(f"{self._curr:.3g}")
         self.check()
 
     def check(self):
+        """
+        Checks if the current value is within the limit. If not, will trigger a reset.
+        """
         self._check_from(self._limit.get_data())
 
-    def _check_from(self, i: int):
+    def _check_from(self, i: float):
         if not self._mode(self._curr, i):
             self.needsReset.emit()
             self._curr = self._start

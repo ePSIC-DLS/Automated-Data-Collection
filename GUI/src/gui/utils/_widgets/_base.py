@@ -58,7 +58,6 @@ class SettingsPopup(widgets.QWidget, abc.ABC, metaclass=AbstractWidget):
     _layout : QVBoxLayout
         The layout of the popup.
     """
-
     settingChanged = core.pyqtSignal(str, object)
 
     def __init__(self):

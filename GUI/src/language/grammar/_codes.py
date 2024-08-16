@@ -5,6 +5,86 @@ from typing import List as _list, Tuple as _tuple
 
 
 class OpCodes(enum.Enum):
+    """
+    Enumeration of all possible opcodes.
+
+    Members
+    -------
+    CONSTANT
+        Represent pushing a constant onto the stack.
+    TRUE
+        Represent creating a truthy constant.
+    FALSE
+        Represent creating a falsey constant.
+    NULL
+        Represent creating a null constant.
+    NEGATE
+        Represent negating the topmost value on the stack.
+    INVERT
+        Represent inverting the topmost value on the stack.
+    POWER
+        Represent performing a power operation on the two topmost values on the stack.
+    ADD
+        Represent adding the two topmost values on the stack.
+    SUB
+        Represent subtracting the two topmost values on the stack.
+    EQUAL
+        Represent equality checks on the two topmost values on the stack.
+    LESS
+        Represent ordered checks on the two topmost values on the stack.
+    MORE
+        Represent ordered checks on the two topmost values on the stack.
+    MIX
+        Represent mixing the two topmost values on the stack.
+    PRINT
+        Represent outputting the topmost value of the stack to the console.
+    GET_GLOBAL
+        Represent getting a global variable.
+    SET_GLOBAL
+        Represent setting a global variable.
+    GET_LOCAL
+        Represent getting a local variable.
+    SET_LOCAL
+        Represent setting a local variable.
+    LOOP
+        Represent jumping backwards through instructions, acting as iteration.
+    FALSEY_JUMP
+        Represent jumping forwards through instructions, only when the topmost stack value is falsey.
+    ALWAYS_JUMP
+        Represent jumping forwards through instructions, acting as a non-conditional jump.
+    ADVANCE
+        Represent advancing the topmost value on the stack (assumes it's an iterator).
+    POP
+        Represent forgetting the topmost value of the stack.
+    DEF_GLOBAL
+        Represent defining a global variable.
+    ENUM
+        Represent defining an enumerated type.
+    GET_FIELD
+        Represent getting a field from an enumerated type.
+    DEF_FIELD
+        Represent defining a field for an enumerated type.
+    RETURN
+        Represent exiting a function (or generator).
+    CALL
+        Represent calling a function (or generator).
+    YIELD
+        Represent pausing a generator, returning its value.
+    SLEEP
+        Represent delaying program execution.
+    SCAN
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    CLUSTER
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    FILTER
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    MARK
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    TIGHTEN
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    SEARCH
+        Has no known language implementation, but calls an external service (the GUI) for its function.
+    """
     CONSTANT = enum.auto()
     TRUE = enum.auto()
     FALSE = enum.auto()
@@ -52,6 +132,21 @@ class OpCodes(enum.Enum):
 
 
 def opcode_is(dset: _tuple[str, ...], code: int) -> str:
+    """
+    Function to determine if a particular opcode belongs to a particular dataset.
+
+    Parameters
+    ----------
+    dset: tuple[str, ...]
+        The dataset of names to check for.
+    code: int
+        The opcode value to check.
+
+    Returns
+    -------
+    str
+        The name of the opcode. This will be an empty string if the opcode isn't in the dataset.
+    """
     for n, v in zip(dset, map(lambda x: OpCodes[x].value, dset)):
         if code == v:
             return n
@@ -68,6 +163,30 @@ JUMP_UP = ("LOOP",)
 
 def disassemble(instructions: _list[int], offset: int, values: _list[str], end: str,
                 output: typing.Callable[[str], None] = None) -> int:
+    """
+    Disassemble a particular instruction, based on a series of instructions and an offset.
+
+    Note that it uses a list of instructions and an index (as opposed to a singular instruction) as this function
+    returns a new offset to use for the next instruction therefore, each jump is inconsistent.
+
+    Parameters
+    ----------
+    instructions: list[int]
+        The series of instructions to index.
+    offset: int
+        The index of the instruction.
+    values: list[str]
+        The list of constant values.
+    end: str
+        The ending string to use (when no output function is provided).
+    output: Callable[[str], None] | None
+        The output function to use. When not provided, will use the `print` function with a fixed ending value.
+
+    Returns
+    -------
+    int
+        The new offset to use for the next instruction.
+    """
     if output is None:
         output = functools.partial(print, end=end)
     code = instructions[offset]

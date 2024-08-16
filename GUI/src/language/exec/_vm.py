@@ -1,31 +1,74 @@
 import enum
 import functools
-import time
 import typing
 from sys import stderr
-from typing import Dict as _dict, List as _list, Optional as _None, Type as _type
+from typing import List as _list, Optional as _None, Type as _type
+
+import time
 
 from ..form import Lexer, Parser
 from ..grammar import OpCodes
-from ..utils import Chunk, InstructionPointer, objs, vals, Stack
+from ..utils import Chunk, InstructionPointer, objs, Stack, vals
 
 V = typing.TypeVar("V", bound=vals.Value)
 
 
 class Status(enum.Enum):
+    """
+    Enumeration of possible interpreter statuses.
+
+    Members
+    -------
+    OK
+
+    COMPILE_ERROR
+
+    RUNTIME_ERROR
+
+    """
     OK = enum.auto()
     COMPILE_ERROR = enum.auto()
     RUNTIME_ERROR = enum.auto()
 
 
 class CallFrame:
+    """
+    Represents a call-stack frame.
+
+    This supports the parser's ideology that code compiles into an implicit 'main' function.
+
+    Attributes
+    ----------
+    _func: Function
+        The function this call frame operates on.
+    _ip: InstructionPointer
+        The pointer to the bytecode instructions for the call-stack.
+    _slots: Stack[Value]
+        The stack slots reserved for this function call.
+    """
 
     @property
     def chunk(self) -> Chunk:
+        """
+        Public access to the bytecode source.
+
+        Returns
+        -------
+        Chunk
+            The function's compilation chunk.
+        """
         return self._func.raw
 
     @property
     def ip(self) -> InstructionPointer:
+        """
+        Public access to the instruction pointer.
+
+        Returns
+        -------
+        InstructionPointer
+            The pointer to the bytecode instructions for the call-stack.
+        """
         return self._ip
 
     @ip.setter
@@ -34,11 +77,27 @@ class CallFrame:
 
     @property
     def stack(self) -> Stack[vals.Value]:
+        """
+        Public access to the local slots.
+
+        Returns
+        -------
+        Stack[Value]
+            The stack slots reserved for this function call.
+        """
         return self._slots
 
     @property
     def name(self) -> vals.String:
-        if not self._func.name.raw:
+        """
+        Public access to the name of the function.
+
+        Returns
+        -------
+        String
+            The name of the function. This will be "script" if the function is nameless.
+        """
+        if not self._func.name:
             return vals.String("script")
         return self._func.name
 
@@ -49,13 +108,52 @@ class CallFrame:
 
 
 class Interpreter(vals.Interpreter):
+    """
+    Concrete interpreter class capable of executing bytecode instructions.
+
+    Attributes
+    ----------
+    _frames: list[CallFrame]
+        The list of call-stack frames.
+    _count: int
+        The number of active call-stacks.
+    _stack: Stack[Value]
+        The stack of all temporary values.
+    _globals: dict[String, Value]
+        The global variables.
+    _errored: bool
+        Whether the interpreter has encountered invalid state.
+    _var: Callable[[str, Value], None] | None
+        The callback to use when a variable is assigned to. This is only relevant for the GUI to update its own values.
+    _unknown: Callable[[int], None]
+        The callback to use when an unknown opcode is found. By default, it will force the interpreter to raise an
+        exception; the GUI uses this for its own commands (such as scanning).
+    _print: Callable[[str], None]
+        The function used to output any calculations.
+    """
 
     @property
     def stack(self) -> Stack[vals.Value]:
+        """
+        Public access to the temporary stack.
+
+        Returns
+        -------
+        Stack[Value]
+            The stack of all temporary values.
+        """
         return self._stack
 
     @property
     def frames(self) -> _list[CallFrame]:
+        """
+        Public access to the interpreter's call frames.
+
+        Returns
+        -------
+        list[CallFrame]
+            The list of call-stack frames.
+        """
         return self._frames
 
     def __init__(self, var_callback: typing.Callable[[str, vals.Value], None] = None,
@@ -85,6 +183,20 @@ class Interpreter(vals.Interpreter):
         self._print = output
 
     def run(self, code: str) -> Status:
+        """
+        Interpret the bytecode instructions given from the relevant code.
+
+        Parameters
+        ----------
+        code: str
+            The source-code to interpret.
+            Note this will be lexed into tokens, then parsed into a chunk of instructions.
+
+        Returns
+        -------
+        Status
+            The final state of the interpreter.
+        """
         tokens = list(Lexer(code).run())
         func = Parser(*tokens, output=self._print).run()
         if func is None:
@@ -98,11 +210,27 @@ class Interpreter(vals.Interpreter):
         self._count += 1
 
     def push(self, val: vals.Value):
+        """
+        Push a new value onto the stack.
+
+        Parameters
+        ----------
+        val: Value
+            The new topmost stack value.
+        """
         self._stack.push(val)
         if self._frames and self._frames[-1].stack.top != self._stack.top:
             self._frames[-1].stack.push(val)
 
     def pop(self) -> vals.Value:
+        """
+        Pop the topmost stack value from the stack.
+
+        Returns
+        -------
+        Value
+            The old topmost stack value.
+        """
         r = self._stack.pop()
         if self._frames and self._frames[-1].stack.top != self._stack.top:
             self._frames[-1].stack.pop()

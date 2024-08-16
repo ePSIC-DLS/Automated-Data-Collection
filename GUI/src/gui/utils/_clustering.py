@@ -16,6 +16,8 @@ class ScanRegion:
 
     Attributes
     ----------
+    _disabled: bool
+        Whether the region is disabled.
     _left: int
         The minimum x-coordinate of the square.
     _top: int
@@ -32,6 +34,14 @@ class ScanRegion:
 
     @property
     def disabled(self) -> bool:
+        """
+        Public access to the status of the region.
+
+        Returns
+        -------
+        bool
+            Whether the region is disabled.
+        """
         return self._disabled
 
     @disabled.setter
@@ -40,6 +50,14 @@ class ScanRegion:
 
     @property
     def size(self) -> int:
+        """
+        Public access to the region's width and height.
+
+        Returns
+        -------
+        int
+            The difference between the minima and maxima of the square.
+        """
         return self._delta
 
     def __init__(self, top_left: _tuple[int, int], size: int, scan_resolution: int):
@@ -159,7 +177,7 @@ class ScanRegion:
         ----------
         onto: RGBImage
             The background image to draw the square onto.
-        outline: RGB
+        outline: int_
             The outline colour to use.
         filled: bool
             Whether the square should be filled. (Default is False)
@@ -170,6 +188,14 @@ class ScanRegion:
                                   fill=None if not filled else outline)
 
     def move(self, by: _tuple[int, int]):
+        """
+        Shift the co-ordinates of the region.
+
+        Parameters
+        ----------
+        by: tuple[int, int]
+            The x and y shift.
+        """
         self._left += by[0]
         self._right += by[0]
         self._top += by[1]
@@ -196,14 +222,14 @@ class Grid:
         The tightened squares.
     _is_tight: bool
         Flag for tightness.
-    _all: list[ScanRegion]
-        All available scan regions within the cluster's bounding box (including padding).
     _pitch_size: int
         The size of each scan region.
-    _start: tuple[int, int]
-        The pixel offset this grid has from the top left corner of the cluster.
     _resolution: int
         The resolution of each scan region.
+    _start: tuple[int, int]
+        The pixel offset this grid has from the top left corner of the cluster.
+    _all: list[ScanRegion]
+        All available scan regions within the cluster's bounding box (including padding).
     """
 
     @property
@@ -244,12 +270,12 @@ class Grid:
 
     def __init__(self, sq_size: int, offset: _tuple[int, int], resolution: int, marking: "Cluster"):
         self._owner = marking
+        self._tight: _list[ScanRegion] = []
         self._is_tight = False
         self._pitch_size = sq_size
         self._start = offset
         self._resolution = resolution
         self._all = list(self._regions())
-        self._tight: _list[ScanRegion] = []
 
     def __iter__(self) -> typing.Iterator[ScanRegion]:
         """
@@ -275,7 +301,7 @@ class Grid:
         ----------
         onto: RGBImage
             The image to draw onto.
-        colour: RGB
+        colour: int_
             The colour to draw each region. Defaults to the cluster's colour.
         """
         if colour is None:
@@ -320,7 +346,7 @@ class Grid:
                     raise ValueError("Cluster too large!")
                 if do_min:
                     minima -= 1
-                if (maxima - minima) % self._pitch_size and minima > 0 and maxima < self._resolution:
+                if (maxima - minima) % self._pitch_size == 0 and minima > 0 and maxima < self._resolution:
                     break
                 if do_max:
                     maxima += 1
@@ -346,6 +372,28 @@ class Grid:
 
 
 class Cluster:
+    """
+    Class to represent a cluster. This cluster has an AABB, along with an actual representation.
+
+    Attributes
+    ----------
+    _label: int_
+        The colour label of the cluster.
+    _binary: GreyBiModal
+        The binary image of the cluster. Note that this will be an image of the same size as the GUI's survey image,
+        with only the cluster itself being white (255).
+    _min: tuple[int, int]
+        The top-left corner of the cluster's AABB.
+    _max: tuple[int, int]
+        The bottom-right corner of the cluster's AABB.
+    _marked: bool
+        Whether the cluster has been turned into a series of grids.
+
+    Raises
+    ------
+    TypeError
+        If the image provided does not have the correct colours.
+    """
 
     @property
     def locked(self) -> bool:
@@ -444,11 +492,11 @@ class Cluster:
         """
         if not isinstance(item, images.AABBCorner):
             raise TypeError(f"Expected a valid corner, got {item}")
-        if item.x() == "left":
+        if item.x() == images.XAxis.LEFT:
             x = Extreme.MINIMA
         else:
             x = Extreme.MAXIMA
-        if item.y() == "top":
+        if item.y() == images.YAxis.TOP:
             y = Extreme.MINIMA
         else:
             y = Extreme.MAXIMA
@@ -456,14 +504,14 @@ class Cluster:
 
     def position(self) -> _tuple[int, int]:
         """
-        Get the centre of the cluster (based on the bounding box).
+        Get the top-left corner of the cluster (based on the bounding box).
 
         Returns
         -------
         tuple[int, int]
-            The centre of the cluster's bounding box.
+            The top-left corner of the cluster's bounding box.
         """
-        return self._min
+        return self[images.AABBCorner.TOP_LEFT]
 
     def extreme(self, axis: Axis, extreme: Extreme) -> int:
         """

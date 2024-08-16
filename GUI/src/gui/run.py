@@ -2,15 +2,19 @@ import enum
 import functools
 import re
 import typing
-from typing import Tuple as _tuple, Optional as _None, List as _list
+from typing import List as _list, Optional as _None, Tuple as _tuple
 
 from PyQt5 import QtWidgets as widgets
 
-from . import pages, bases, utils
-from .. import images, microscope
-from ..language import OpCodes, vals, objs
+from . import bases, pages, utils
+from .. import images, load_settings, microscope
+from ..language import objs, OpCodes, vals
+from ..validation import examples as pipelines
 
 app = widgets.QApplication([])
+
+sizes = load_settings("assets/config.json", size=pipelines.survey_size, scan_size=pipelines.survey_size,
+                      scan_resolution=pipelines.resolution)
 
 
 def _help(text: str) -> str:
@@ -44,7 +48,8 @@ class CombinedPage(widgets.QWidget):
 
 class GUI(widgets.QMainWindow):
 
-    def __init__(self, size: int):
+    def __init__(self, size: int, cluster_colour: int, marker_colour: int, histogram_outline: int, pattern_colour: int,
+                 init_dwell: float, finished_colour: int):
         def _update_thresh(name: str, value):
             if name == "minima":
                 stage_2.set_setting("_minima", value)
@@ -151,6 +156,8 @@ class GUI(widgets.QMainWindow):
 
             return objs.NativeIterator(_inner())
 
+        initial_pitch = sizes["scan_size"] // (sizes["scan_resolution"] // sizes["size"])
+
         super().__init__()
         layout = widgets.QVBoxLayout()
         actions = widgets.QHBoxLayout()
@@ -168,19 +175,19 @@ class GUI(widgets.QMainWindow):
 
         self._microscope = microscope.Microscope(microscope.Detector.ADF1, True, microscope.Lens.CL1, microscope.Axis.X,
                                                  beam=False, valve=True)
-        self._scanner = microscope.Scanner(microscope.FullScan((size, size)), dwell_time=15e-6)
+        self._scanner = microscope.Scanner(microscope.FullScan((size, size)), dwell_time=init_dwell)
 
         self._master.setUsesScrollButtons(False)
         stage_m = pages.additionals.Scanner(self._microscope, self._scanner)
-        stage_1 = pages.pipeline.SurveyImage(size, 0xFF0000, 8, self._scanner, stage_m.scan)
+        stage_1 = pages.pipeline.SurveyImage(size, cluster_colour, initial_pitch, self._scanner, stage_m.scan)
         stage_2 = pages.pipeline.ProcessingPipeline(size, stage_1, _data_failed)
-        stage_3 = pages.pipeline.Clusters(size, 0xFF0000, 8, stage_2, _data_failed)
+        stage_3 = pages.pipeline.Clusters(size, cluster_colour, initial_pitch, stage_2, _data_failed)
         stage_4 = pages.pipeline.Management(size, stage_1, stage_3, _data_failed)
-        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, 0x00FF00, _data_failed,
+        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, marker_colour, finished_colour, _data_failed,
                                             self._microscope, self._scanner, stage_3, stage_2)
 
-        stage_h = pages.additionals.Histogram(size, stage_1, 0xFFFFFF, _data_failed)
-        stage_p = pages.additionals.ScanType(size, 0x00FF00, _data_failed)
+        stage_h = pages.additionals.Histogram(size, stage_1, histogram_outline, _data_failed)
+        stage_p = pages.additionals.ScanType(size, pattern_colour, _data_failed)
         stage_c = pages.additionals.Manager(_data_failed, self._microscope, self._scanner, (size, size), stage_m.scan)
         stage_f = pages.additionals.DiffractionFilter(stage_3)
         corrections = stage_c.corrections()
@@ -285,6 +292,10 @@ class GUI(widgets.QMainWindow):
         focus.runEnd.connect(lambda: self._resume(-1))
         drift.runEnd.connect(lambda: self._resume(-1))
 
+        stage_5.runStart.connect(drift.run)
+
+        stage_1.clusterFound.connect(lambda _: stage_4.clear())
+
         self._master.addTab(CombinedPage(image=stage_1, histogram=stage_h), "Survey (&1)")
         self._master.setTabToolTip(0, "A page showcasing the survey image and its histogram")
         self._master.addTab(stage_2, "Processed Image (&2)")
@@ -325,6 +336,9 @@ class GUI(widgets.QMainWindow):
         self._btns = (scan, process, cluster, search, pause, stop, show_help)
         for btn in self._btns:
             actions.addWidget(btn)
+        for page in self._pages:
+            page.clear()
+            page.start()
 
     def _jump(self, wrapped: typing.Callable[[], None], clear_from: int, jump_to: _None[_tuple[int, _None[int]]]) \
             -> typing.Callable[[], None]:
@@ -365,7 +379,11 @@ class GUI(widgets.QMainWindow):
 
 
 def main():
-    window = GUI(512)
+    configuration = load_settings("assets/config.json", init_dwell=pipelines.dwell_time,
+                                  cluster_colour=pipelines.colour, marker_colour=pipelines.colour,
+                                  histogram_outline=pipelines.colour, pattern_colour=pipelines.colour,
+                                  finished_colour=pipelines.colour)
+    window = GUI(sizes["size"], **configuration)
     window.show()
     app.exec()
 

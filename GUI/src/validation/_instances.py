@@ -56,15 +56,39 @@ int16: Pipeline[Any, int]
 apt_size: Pipeline[Any, int]
     Checks for an integer between 0 and 4.
 obj_focus: Pipeline[Any, int]
-    Checks for an integer with an absolute value between 1 and 50.
+    Checks for an integer with an absolute value less than 50.
 stage_pos: Pipeline[Any, int]
-    Checks for an integer with an absolute value less than or equal to 100 thousand (10 ^ 5)
+    Checks for an integer with an absolute value less than or equal to 100,000.
 stage_tilt: Pipeline[Any, int]
-    Checks for an integer with an absolute value less than or equal to 90
+    Checks for an integer with an absolute value less than or equal to 90.
+dwell_time: Pipeline[Any, float]
+    Checks for a floating point number between 40ns and 70s
+ttl_input: Pipeline[Any, int]
+    Checks for an integer between 0 and 4.
+ttl_output: Pipeline[Any, int]
+    Checks for an integer between 0 and 7.
+ttl_index: Pipeline[Any, int]
+    Checks for an integer between 0 and 9.
+
 focus: Pipeline[Any, int]
-    Checks for an integer between 2 and 30.
+    Checks for a number of scans between 2 and 30.
+focus_decay: Pipeline[Any, float]
+    Checks for a decay rate between 0 and 0.1, not including 0.
+focus_bits: Pipeline[Any, int]
+    Checks for a hexadecimal number between 0x10 and 0x1000.
 emission: Pipeline[Any, float]
-    Checks for a float between 0.1 and 5.1.
+    Checks for an emission value between 0.1 and 5.1.
+drift: Pipeline[Any, int]
+    Checks for a number of scans between 2 and 30.
+
+survey_size: Pipeline[Any, int]
+    Checks for an integer between 64 and 1024 that is a power of 2.
+colour: Pipeline[Any, int]
+    Checks for an integer (represented in hexadecimal, with a leading #) between 0 and 16,777,215.
+engine_type: Pipeline[Any, str]
+    Checks for a string that is QD or JEOL.
+
+
 """
 import typing
 
@@ -152,6 +176,10 @@ natural_int = any_int + Pipeline(
     Step(LowerBoundValidator(0, inclusive=False), desc="ensure the integer is larger than 0"),
     in_type=int, out_type=int
 )
+positive_int = any_int + Pipeline(
+    Step(LowerBoundValidator(0), desc="ensure the integer is positive"),
+    in_type=int, out_type=int
+)
 natural_float = any_float + Pipeline(
     Step(LowerBoundValidator(0, inclusive=False), desc="ensure the float is larger than 0"),
     in_type=float, out_type=float
@@ -212,27 +240,149 @@ ttl_index = any_int + Pipeline(
 )
 
 focus = any_int + Pipeline(
-    Step(RangeValidator.known((2, 30)), desc="ensure the integer is between 2 and 30"),
+    Step(RangeValidator.known((0, 30)), desc="ensure the integer is between 0 and 30"),
     in_type=int, out_type=int
 )
-focus_runs = any_int + Pipeline(
-    Step(RangeValidator.known((10, 50)), desc="ensure the integer is between 10 and 50"),
-    Step(FactorValidator(10), desc="ensure the integer is a multiple of 10"),
-    in_type=int, out_type=int
+focus_decay = any_float + Pipeline(
+    Step(RangeValidator.known((0.0, 1.0), l_bound=False, u_bound=False), desc="ensure the float is between 0 and 0.1"),
+    in_type=float, out_type=float
 )
 focus_bits = any_int + Pipeline(
-    Step(RangeValidator.known((1, 16 ** 3)), desc="ensure the integer is between 1 and 4096"),
+    Step(RangeValidator.known((10, 16 ** 2), u_bound=False), desc="ensure the integer is between 16 and 4096"),
     in_type=int, out_type=int
+)
+focus_limit = any_float + Pipeline(
+    Step(RangeValidator.known((30, 300)), desc="ensure the number is between 30 and 300"),
+    in_type=float, out_type=float
 )
 emission = any_float + Pipeline(
     Step(RangeValidator.known((0.1, 5.1)), desc="ensure the float is between 0.1 and 5.1"),
     in_type=float, out_type=float
 )
 drift = any_int + Pipeline(
-    Step(RangeValidator.known((2, 30)), desc="ensure the integer is between 2 and 30"),
+    Step(RangeValidator.known((0, 30)), desc="ensure the integer is between 0 and 30"),
     in_type=int, out_type=int
 )
-drift_radius = any_int + Pipeline(
-    Step(RangeValidator.known((5, 15)), desc="ensure the integer is between 5 and 15"),
+
+survey_size = any_int + Pipeline(
+    Step(RangeValidator.known((64, 1024)), desc="ensure the integer is between 64 and 1024"),
+    Step(IntegerValidator(), LogTranslator(2), temporary=True, desc="ensure the integer is a power of 2"),
+    in_type=int, out_type=int
+)
+colour = any_str + Pipeline(
+    Step(ValueValidator(7), LengthTranslator(), temporary=True, desc="ensure the string has 7 characters"),
+    in_type=str, out_type=str
+) + Pipeline.prefix("#") + Pipeline(
+    Step(VIterableMixin(ContainerValidator(*"0123456789ABCDEFabcdef")),
+         desc="ensure the string contains only valid hexadecimal characters"),
+    Step.morph(BasedIntegerTranslator(16), "convert the valid hexadecimal number to an integer"),
+    in_type=str, out_type=int
+)
+engine_type = any_str + Pipeline(
+    Step(ContainerValidator("JEOL", "QD"), desc="ensure the string is a valid engine type."),
+    in_type=str, out_type=str
+)
+
+blur_call = Pipeline.static_tuple(2, kernel, kernel)
+gss_blur_call = Pipeline.dynamic_tuple(4, kernel, kernel, sigma, sigma)
+sharpen_call = Pipeline.dynamic_tuple(3, kernel, sigma, sigma)
+one_element_call = Pipeline.static_tuple(1, kernel, kernel)
+morphology_call = Pipeline.dynamic_tuple(5,
+                                         kernel, kernel,
+                                         ContainerValidator("RECT", "CROSS", "ELLIPSE"),
+                                         morph, morph
+                                         )
+call_order = Pipeline.dynamic_tuple(2, any_int, any_bool)
+hist_colours = any_int + Pipeline.bitstream(8, allow_negative=False)
+distance_algorithm = any_str + Pipeline(
+    Step(ContainerValidator("Manhattan", "Euclidean", "Minkowski")),
+    in_type=str, out_type=str
+)
+numerical_match = any_str + Pipeline(
+    Step(ContainerValidator("NO_LOWER", "EXACT", "NO_HIGHER"),
+         desc="ensure the element is a recognised numerical comparison"),
+    in_type=str, out_type=str
+)
+flag_3 = Pipeline.static_tuple(3, any_bool, any_bool)
+bit_depth = any_int + Pipeline(
+    Step(ContainerValidator(1, 6, 12), desc="ensure the integer is 1, 6, or 12"),
+    in_type=int, out_type=int
+)
+flag_4 = Pipeline.static_tuple(4, any_bool, any_bool)
+resolution = any_int + Pipeline(
+    Step(ContainerValidator(256, 512, 1024, 2048, 4096, 8192, 16384),
+         desc="ensure the pattern is a power of two larger than 128 but smaller than 32768"),
+    in_type=int, out_type=int
+)
+pattern = any_str + Pipeline(
+    Step(ContainerValidator("raster", "snake", "spiral", "grid", "random"),
+         desc="ensure the pattern is a valid scan pattern"),
+    in_type=str, out_type=str
+)
+raster_pattern = Pipeline(
+    Step(positive_int, KeyTranslator("skip", int), temporary=True, desc="ensure the 'skip' parameter is valid"),
+    Step(ContainerValidator("TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"), KeyTranslator("start", str),
+         temporary=True, desc="ensure the 'start' parameter is valid"),
+    Step(ContainerValidator("along x", "along y"), KeyTranslator("orientation", str), temporary=True,
+         desc="ensure the 'orientation' parameter is valid"),
+    Step(coverage, KeyTranslator("coverage", float), temporary=True, desc="ensure the 'coverage' parameter is valid"),
+    in_type=dict, out_type=dict
+)
+snake_pattern = Pipeline(
+    Step(positive_int, KeyTranslator("skip", int), temporary=True, desc="ensure the 'skip' parameter is valid"),
+    Step(ContainerValidator("TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"), KeyTranslator("start", str),
+         temporary=True, desc="ensure the 'start' parameter is valid"),
+    Step(ContainerValidator("along x", "along y"), KeyTranslator("orientation", str), temporary=True,
+         desc="ensure the 'orientation' parameter is valid"),
+    Step(coverage, KeyTranslator("coverage", float), temporary=True, desc="ensure the 'coverage' parameter is valid"),
+    in_type=dict, out_type=dict
+)
+spiral_pattern = Pipeline(
+    Step(positive_int, KeyTranslator("skip", int), temporary=True, desc="ensure the 'skip' parameter is valid"),
+    Step(ContainerValidator("TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"), KeyTranslator("start", str),
+         temporary=True, desc="ensure the 'start' parameter is valid"),
+    Step(ContainerValidator("outside-in", "inside-out"), KeyTranslator("orientation", str), temporary=True,
+         desc="ensure the 'orientation' parameter is valid"),
+    Step(coverage, KeyTranslator("coverage", float), temporary=True, desc="ensure the 'coverage' parameter is valid"),
+    in_type=dict, out_type=dict
+)
+grid_pattern = Pipeline(
+    Step(positive_int, KeyTranslator("gap", int), temporary=True, desc="ensure the 'gap' parameter is valid"),
+    Step(positive_int, KeyTranslator("shift", int), temporary=True, desc="ensure the 'shift' parameter is valid"),
+    Step(ContainerValidator("row-major (++)", "row-major (-+)", "row-major (+-)", "row-major (--)", "column-major (++)",
+                            "column-major (-+)", "column-major (+-)", "column-major (--)"),
+         KeyTranslator("order", str),
+         temporary=True, desc="ensure the 'order' parameter is valid"),
+    Step(coverage, KeyTranslator("coverage", float), temporary=True, desc="ensure the 'coverage' parameter is valid"),
+    in_type=dict, out_type=dict
+)
+random_pattern = Pipeline(
+    Step(ContainerValidator("EXP", "LAPLACE", "LOGISTIC", "NORMAL", "POISSON", "UNIFORM"), KeyTranslator("r_type", str),
+         temporary=True, desc="ensure the 'r_type' parameter is valid"),
+    Step(positive_int, KeyTranslator("n", int), temporary=True, desc="ensure the 'n' parameter is valid"),
+    Step(coverage, KeyTranslator("coverage", float), temporary=True, desc="ensure the 'coverage' parameter is valid"),
+    Step(positive_float, KeyTranslator("scale", float), temporary=True, desc="ensure the 'scale' parameter is valid"),
+    Step(any_float, KeyTranslator("loc", float), temporary=True, desc="ensure the 'loc' parameter is valid"),
+    Step(positive_float, KeyTranslator("lam", float), temporary=True, desc="ensure the 'lam' parameter is valid"),
+    Step(positive_int, KeyTranslator("low", int), temporary=True, desc="ensure the 'low' parameter is valid"),
+    Step(positive_int, KeyTranslator("high", int), temporary=True, desc="ensure the 'high' parameter is valid"),
+    in_type=dict, out_type=dict
+)
+window_order = Pipeline.static_tuple(3, ContainerValidator("HANNING", "SOBEL", "MEDIAN"), TBlank())
+lens_value = any_str + Pipeline(
+    Step(ValueValidator(4), LengthTranslator(), temporary=True, desc="ensure the string has 4 characters"),
+    in_type=str, out_type=str
+) + Pipeline(
+    Step(VIterableMixin(ContainerValidator(*"0123456789ABCDEFabcdef")),
+         desc="ensure the string contains only valid hexadecimal characters"),
+    Step.morph(BasedIntegerTranslator(16), "convert the valid hexadecimal number to an integer"),
+    in_type=str, out_type=int
+)
+focus_change = lens_value + Pipeline(
+    Step(UpperBoundValidator(16 ** 2, inclusive=False), desc="ensure the integer can fit into 2 nibbles"),
+    in_type=int, out_type=int
+)
+focus_limit_hex = lens_value + Pipeline(
+    Step(UpperBoundValidator(300), desc="ensure the integer is less than 300 (or equal to it)"),
     in_type=int, out_type=int
 )

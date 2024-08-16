@@ -1,27 +1,78 @@
 import enum
 import typing
-from sys import stderr
 from typing import Dict as _dict, Optional as _None, Type as _type
 
 from ..grammar import OpCodes, OpCodes as _Byte, Precedence, Predicate, rules, tokens
-from ..utils import Chunk, vals, objs
+from ..utils import Chunk, objs, vals
 
 _T = typing.TypeVar("_T", bound=tokens.Token)
 
 
 class TokenLandMark(enum.Enum):
+    """
+    Enumeration to represent a particular landmark in the token stream.
+
+    Members
+    -------
+    PREVIOUS
+
+    CURRENT
+
+    """
     PREVIOUS = enum.auto()
     CURRENT = enum.auto()
 
 
 class Parser(rules.Consumer):
+    """
+    Concrete implementation of a consumer.
+
+    Attributes
+    ----------
+    _print: Callable[[str], str]
+        The function to output data.
+    _tokens: Token
+        The stream of tokens to parse.
+    _i: int
+        The absolute index of the current token.
+    _error: bool
+        Whether the parser has ever been in an invalid state.
+    _panic: bool
+        Whether the parser is currently in an invalid state.
+    _compiler: Compiler
+        The scope-resolver to use.
+    _pre_syms: dict[TokenType, PrefixRule]
+        The mapping of symbol types to prefix rules.
+    _post_syms: dict[TokenType, InfixRule]
+        The mapping of symbol types to non-prefix rules.
+    _pre_keys: dict[KeywordType, PrefixRule]
+        The mapping of keyword types to prefix rules.
+    _post_keys: dict[KeywordType, InfixRule]
+        The mapping of keyword types to non-prefix rules.
+    """
 
     @property
     def chunk(self) -> Chunk:
+        """
+        Public access to the current chunk
+
+        Returns
+        -------
+        Chunk
+            The chunk to compile code into.
+        """
         return self._compiler.function.raw
 
     @property
     def compiler(self) -> rules.Compiler:
+        """
+        Public access to the compiler.
+
+        Returns
+        -------
+        Compiler
+            The scope-resolver to use.
+        """
         return self._compiler
 
     @compiler.setter
@@ -32,6 +83,14 @@ class Parser(rules.Consumer):
 
     @property
     def errored(self) -> bool:
+        """
+        Public access to the errored state.
+
+        Returns
+        -------
+        bool
+            Whether the parser has ever been in an invalid state.
+        """
         return self._error
 
     def __init__(self, *stream: tokens.Token, output: typing.Callable[[str], str]):
@@ -39,7 +98,7 @@ class Parser(rules.Consumer):
         self._tokens = stream
         self._i = 0
         self._error = self._panic = False
-        self._compiler = rules.Compiler(self, rules.FuncType.SCRIPT)
+        self.compiler = rules.Compiler(self, rules.FuncType.SCRIPT)
         self._pre_syms: _dict[tokens.TokenType, rules.PrefixRule] = {
             tokens.TokenType.NUM: rules.NumberRule(), tokens.TokenType.STRING: rules.CharRule(vals.String),
             tokens.TokenType.PATH: rules.CharRule(vals.Path), tokens.TokenType.IDENTIFIER: rules.VarRule(),
@@ -60,7 +119,7 @@ class Parser(rules.Consumer):
             tokens.TokenType.OUTPUT: rules.PrintRule(), tokens.TokenType.START_CALL: rules.CallRule(),
             tokens.TokenType.ACCESS: rules.Get()
         }
-        self._pre_words: _dict[tokens.KeywordType, rules.PrefixRule] = {
+        self._pre_keys: _dict[tokens.KeywordType, rules.PrefixRule] = {
             tokens.KeywordType.ON: rules.KeywordRule(), tokens.KeywordType.OFF: rules.KeywordRule(),
             tokens.KeywordType.NULL: rules.KeywordRule(), tokens.KeywordType.D_CORRECT: rules.CharRule(vals.Correction),
             tokens.KeywordType.E_CORRECT: rules.CharRule(vals.Correction),
@@ -69,7 +128,7 @@ class Parser(rules.Consumer):
             tokens.KeywordType.L2_NORM: rules.CharRule(vals.Algorithm),
             tokens.KeywordType.LP_NORM: rules.CharRule(vals.Algorithm)
         }
-        self._post_words: _dict[tokens.KeywordType, rules.InfixRule] = {
+        self._post_keys: _dict[tokens.KeywordType, rules.InfixRule] = {
 
         }
         self._stmts: _dict[tokens.KeywordType, rules.StmtRule] = {
@@ -113,6 +172,15 @@ class Parser(rules.Consumer):
             self.advance()
 
     def run(self) -> _None[objs.Function]:
+        """
+        Parse the entire token stream in one go.
+
+        Returns
+        -------
+        Function | None
+            The function that all code has been compiled into. Note the parser compiles top-level code into an implicit
+            'main' function (as semantically, it operates the same - except global variables).
+        """
         while self.peek().token_type != tokens.TokenType.EOF:
             self._scan()
         func = self.pop()
@@ -222,7 +290,7 @@ class Parser(rules.Consumer):
             self._error_at(token, "Expected expression")
             return
         if isinstance(token, tokens.KeywordToken):
-            parser = self._pre_words.get(token.keyword_type)
+            parser = self._pre_keys.get(token.keyword_type)
             exp_type = f"PAL_KEYWORD_{token.keyword_type.name}"
         else:
             parser = self._pre_syms.get(token.token_type)
@@ -238,7 +306,7 @@ class Parser(rules.Consumer):
                 self._error_at(token, token.message)
                 return
             if isinstance(token, tokens.KeywordToken):
-                parser = self._post_words.get(token.keyword_type)
+                parser = self._post_keys.get(token.keyword_type)
             else:
                 parser = self._post_syms.get(token.token_type)
             self.advance()
@@ -249,7 +317,7 @@ class Parser(rules.Consumer):
     def get_precedence(self) -> int:
         token = self.peek()
         if isinstance(token, tokens.KeywordToken):
-            parser = self._post_words.get(token.keyword_type)
+            parser = self._post_keys.get(token.keyword_type)
         else:
             parser = self._post_syms.get(token.token_type)
         return parser.get_precedence().value if parser is not None else 0

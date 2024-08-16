@@ -1,11 +1,72 @@
 from .._base import Base
 from .._utils import *
 from ... import validation
+from typing import Tuple as _tuple
 
 if ONLINE:
     from PyJEM.TEM3 import EOS3
-else:
-    from ..PyJEM.offline.TEM3 import EOS3
+
+
+class EOS3Offline:
+    """
+    Placeholder class to represent an offline connection to the EOS system.
+    """
+
+    def GetMagValue(self) -> _tuple[str, str, str]:
+        """
+        Get the magnification value.
+
+        Returns
+        -------
+        tuple[str, str, str]
+            A tuple of strings representing the magnification value, an 'X' and a combination of the first two elements.
+        """
+        return "20000", "X", "X20000"
+
+    def SetSelector(self, new: int):
+        """
+        Set the magnification value.
+
+        Parameters
+        ----------
+        new: int
+            The index of the magnification value.
+        """
+        pass
+
+    def GetStemCamValue(self) -> _tuple[str, str, str]:
+        """
+        Get the camera length.
+
+        Returns
+        -------
+        tuple[str, str, str]
+            A tuple of strings representing the camera length, an 'X' and a combination of the first two elements.
+        """
+        return "20000", "X", "X20000"
+
+    def SetStemCamSelector(self, new: int):
+        """
+        Set the camera length.
+
+        Parameters
+        ----------
+        new: int
+            The index of the camera length.
+        """
+        pass
+
+    def SetObjFocus(self, new: int):
+        """
+        Set the objective focusing value.
+
+        Parameters
+        ----------
+        new: int
+            The new focus value.
+        """
+        pass
+
 
 mag_vals = validation.ContainerValidator(
     int(20e3), int(25e3), int(30e3), int(40e3), int(50e3), int(60e3), int(80e3), int(100e3), int(120e3), int(150e3),
@@ -42,8 +103,6 @@ class Controller(Base):
         int
             The current magnification value. Note that when offline, it returns twenty thousand as a default value.
         """
-        if not ONLINE:
-            return 20_000
         return int(self._controller.GetMagValue()[0])
 
     @magnification.setter
@@ -62,8 +121,6 @@ class Controller(Base):
         int
             The current camera length. Note that when offline, it returns twenty thousand as a default value.
         """
-        if not ONLINE:
-            return 20_000
         return int(self._controller.GetStemCamValue()[0])
 
     @camera_length.setter
@@ -74,7 +131,10 @@ class Controller(Base):
 
     def __init__(self, curr_mag: int = None, curr_length: int = None):
         super().__init__("EOS")
-        self._controller = EOS3()
+        if ONLINE:
+            self._controller = EOS3()
+        else:
+            self._controller = EOS3Offline()
         self._vals = mag_vals.values
         if curr_mag is not None:
             self.magnification = curr_mag

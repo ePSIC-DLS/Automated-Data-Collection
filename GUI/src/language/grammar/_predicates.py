@@ -19,6 +19,7 @@ class Predicate(typing.Generic[T], abc.ABC):
     Abstract Methods
     ----------------
     __call__
+    __str__
     """
 
     @abc.abstractmethod

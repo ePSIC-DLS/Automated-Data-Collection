@@ -1,1 +1,30 @@
-selected = Random(Randoms.UNIFORM, 40, [1, 1], 1, 0, 0, 3, 20)
+maxima = 80
+threshold_inversion = true
+
+epsilon = 4.5
+
+session = 'EXAMPLE'
+sample = 'Platinum_Crystal'
+save_path = "X:/2024/{session}/Merlin/{sample}_data"
+
+func main(process){
+    Scan
+    process()
+    Cluster
+    Mark
+    Tighten
+    Search
+}
+
+func preprocess(){
+    for (var i = 0, i < 2, i = i + 1){
+        gss_blur(3, 3, 0, 0)
+    }
+    threshold()
+}
+
+
+foreach (var _ = stage_snake([10, 10], [5, 5])){
+    main(preprocess)
+    wait 2 ^ -2
+}

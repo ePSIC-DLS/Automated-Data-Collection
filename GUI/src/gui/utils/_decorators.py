@@ -89,6 +89,16 @@ class BaseDecorator(typing.Generic[P, R, Options], abc.ABC):
 
     @property
     def py_func(self) -> typing.Callable[P, R]:
+        """
+        Public access to the underlying python function wrapped by the decorator.
+
+        This differs from `wrapped` in that it chains for *all* applied decorators.
+
+        Returns
+        -------
+        Callable[P, R]
+            The underlying python function under all decorators.
+        """
         obj = self
         while isinstance(obj, BaseDecorator):
             obj = obj.wrapped
@@ -160,6 +170,31 @@ class BaseDecorator(typing.Generic[P, R, Options], abc.ABC):
             obj = obj.wrapped
 
     def find(self, sub: typing.Type[D]) -> D:
+        """
+        Find a particular decorator subclass applied to the underlying python function.
+
+        This will search under arbitrarily nested decorators.
+
+        Generics
+        --------
+        D: BaseDecorator
+            The decorator type to search for.
+
+        Parameters
+        ----------
+        sub: type[D]
+            The decorator type to search for.
+
+        Returns
+        -------
+        D
+            The found decorator subclass.
+
+        Raises
+        ------
+        TypeError
+            If the wrapped function is not wrapped by the specified subclass.
+        """
         if not self.is_(sub):
             raise TypeError(f"{self} is not a {sub}")
         obj = self
@@ -214,6 +249,8 @@ class SimpleDecorator(BaseDecorator[P, R, BaseOptions], typing.Generic[P, R], ab
         -------
         Callable[[Callable[P, R], Self]
             A callable with only one argument that returns an instance of this decorator.
+            This is the class constructor, hence why this function is not recommended for use - it returns the same
+            thing as if it was not used.
         """
         return cls
 
@@ -246,7 +283,7 @@ class Thread(BaseDecorator[P, None, ThreadOptions], typing.Generic[P]):
         super().__init__(fn, manager=manager)
 
     def __str__(self) -> str:
-        return f"<Threaded{self._wrapped}>"
+        return f"<Threaded {self._wrapped}>"
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> None:
         """
@@ -343,7 +380,7 @@ class Stoppable(BaseDecorator[typing.Optional[R], None, ThreadOptions], typing.G
         self._callFinished.connect(self._end)
 
     def __str__(self) -> str:
-        return f"<Stoppable{self._wrapped}>"
+        return f"<Stoppable {self._wrapped}>"
 
     def __call__(self) -> None:
         """
@@ -407,7 +444,7 @@ class Tracked(SimpleDecorator[P, R], typing.Generic[P, R], core.QObject, metacla
         core.QObject.__init__(self)
 
     def __str__(self) -> str:
-        return f"<StatusTracked{self._wrapped}>"
+        return f"<StatusTracked {self._wrapped}>"
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> None:
         """

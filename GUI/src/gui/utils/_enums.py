@@ -8,7 +8,9 @@ class LabelOrder(_Base):
     Members
     -------
     PREFIX
+
     SUFFIX
+
     """
     PREFIX = _member()
     SUFFIX = _member()
@@ -39,6 +41,7 @@ class Axis(_Base):
     Members
     -------
     X
+
     Y
     """
     X = _member()
@@ -52,7 +55,9 @@ class Extreme(_Base):
     Members
     -------
     MINIMA
+
     MAXIMA
+
     """
     MINIMA = _member()
     MAXIMA = _member()
@@ -65,7 +70,9 @@ class Overlap(_Bitwise):
     Members
     -------
     X
+
     Y
+
     """
     X = _member()
     Y = _member()
@@ -82,9 +89,9 @@ class StoppableStatus(_Base):
     PAUSED
         Function state is remembered, but function is not running.
     DEAD
-        Function state is forgotten and function is not remaining
+        Function state is forgotten and function is not running.
     FINISHED
-        Function is not running, state doesn't matter
+        Function is not running, state doesn't matter.
     """
     ACTIVE = _member()
     PAUSED = _member()
@@ -114,8 +121,11 @@ class ErrorSeverity(_Base):
     Members
     -------
     INFO
+
     WARNING
+
     ERROR
+
     """
     INFO = _member()
     WARNING = _member()
@@ -129,7 +139,9 @@ class SettingsDepth(_Bitwise):
     Members
     -------
     REGULAR
+
     ADVANCED
+
     """
     REGULAR = _member()
     ADVANCED = _member()
@@ -142,8 +154,11 @@ class Match(_Base):
     Members
     -------
     NO_LOWER
+
     EXACT
+
     NO_HIGHER
+
     """
     NO_LOWER = _member()
     EXACT = _member()
@@ -181,9 +196,13 @@ class Stages(_Bitwise):
     Members
     -------
     SURVEY
+
     PROCESSED
+
     CLUSTERS
+
     MARKER
+
     """
     SURVEY = _member()
     PROCESSED = _member()
@@ -216,11 +235,17 @@ class RandomTypes(_Base):
     Members
     -------
     EXP
+
     LAPLACE
+
     LOGISTIC
+
     NORMAL
+
     POISSON
+
     UNIFORM
+
     """
     EXP = _member()
     LAPLACE = _member()
@@ -237,62 +262,12 @@ class Corrections(_Bitwise):
     Members
     -------
     FOCUS
+
     EMISSION
+
     DRIFT
+
     """
     FOCUS = _member()
     EMISSION = _member()
     DRIFT = _member()
-
-
-class OptimisationDirection(_Base):
-    """
-    Enumeration to represent the different step directions possible.
-
-    Members
-    -------
-    INCREASE
-    DECREASE
-    """
-    INCREASE = _member()
-    DECREASE = _member()
-
-    def shift(self, init: float, step: float) -> float:
-        """
-        Shift the value in the corresponding direction.
-
-        Parameters
-        ----------
-        init: float
-            The initial value.
-        step: float
-            The step value.
-
-        Returns
-        -------
-        float
-            The shifted value.
-        """
-        if self == self.INCREASE:
-            return init + step
-        else:
-            return init - step
-
-    @classmethod
-    def cmp(cls, value: float) -> "OptimisationDirection":
-        """
-        Alternative constructor to compare a value to 0 to determine the new direction.
-
-        Parameters
-        ----------
-        value: float
-            The value to compare.
-
-        Returns
-        -------
-        OptimisationDirection
-            The new direction.
-        """
-        if value > 0:
-            return cls.INCREASE
-        return cls.DECREASE

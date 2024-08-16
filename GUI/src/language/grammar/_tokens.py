@@ -33,7 +33,11 @@ class TokenType(_Base):
     SEPARATE
         Recognised by a comma, it represents a separator character.
     ACCESS
-       Recognised by a dot, it represents getting a property.
+        Recognised by a dot, it represents getting a property.
+    ASSIGN
+        Recognised by an equal sign, it represents setting a value.
+    OUTPUT
+        Recognised by a question mark, it represents outputting a value to the console.
     START_CALL
         Recognised by a left bracket, it represents beginning a function call or a bracketed expression.
     END_CALL
@@ -46,12 +50,28 @@ class TokenType(_Base):
         Recognised by a left brace, it represents beginning a new lexical scope.
     END_BLOCK
         Recognised by a right brace, it represents ending the current lexical scope
-    POW
-        Recognised by a chevron, it is a binary operator.
     NEG
         Recognised by a minus sign, it is a unary operator.
-    ASSIGN
-        Recognised by an equal sign, it represents setting a value
+    INV
+        Recognised by an exclamation mark, it is a unary operator.
+    POW
+        Recognised by a chevron, it is a binary operator.
+    PLUS
+        Recognised by a plus, it is a binary operator.
+    COMBINE
+        Recognised by a vertical bar, it is a binary operator.
+    EQ
+        Recognised by two equal signs, it represents an equality comparison between two values.
+    LT
+        Recognised by a less than sign, it represents an ordered comparison between two values.
+    GT
+        Recognised by a greater than sign, it represents an ordered comparison between two values.
+    NEQ
+        Recognised by an exclamation mark and an equals sign, it represents an equality comparison between two values.
+    LTE
+        Recognised by a less than sign and an equals sign, it represents an ordered comparison between two values.
+    GTE
+        Recognised by a greater than sign and an equals sign, it represents an ordered comparison between two values.
     """
     ERR = "#"
     NUM = "##"
@@ -127,25 +147,29 @@ class KeywordType(_Base):
         Recognised by 'true', it represents the truthy boolean.
     OFF
         Recognised by 'false', it represents the falsey boolean.
+    NULL
+        Recognised by 'void', it represents an absence of a value.
     VAR_DEF
         Recognised by 'var', it represents variable definition.
     FUNC_DEF
         Recognised by 'func', it represents function definition.
     GEN_DEF
         Recognised by 'iter', it represents generator definition.
-    LOOP
-        Recognised by 'repeat', it represents iteration.
+    ENUM_DEF
+        Recognised by 'namespace', it represents an enumeration definition.
+    LOOP_RANGE
+        Recognised by 'for', it represents iteration using a c-style for loop.
+    LOOP_ITER
+        Recognised by 'foreach', it represents iteration using a python-style for loop.
     DELAY
         Recognised by 'wait', it represents delaying for a certain amount of time.
     EXIT
         Recognised by 'return', it represents exiting from a function.
-    ALIAS
-        Recognised by 'as', it allows for a variable definition in loops.
     """
     SURVEY = "Scan"
     SEGMENT = "Cluster"
     FILTER = "filter"
-    INTERACT = "mark"
+    INTERACT = "Mark"
     MANAGE = "Tighten"
     SCAN = "Search"
 

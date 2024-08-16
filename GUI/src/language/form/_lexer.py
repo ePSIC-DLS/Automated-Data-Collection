@@ -17,7 +17,7 @@ class Lexer:
     _row: int
         The row (line) number of the current token. Increments with every newline character.
     _col: int
-        The column number of the current token. Reset every newline character.
+        The column (character) number of the current token. Resets every newline character.
     _length: int
         The length of the source string.
     """
@@ -152,8 +152,8 @@ class Lexer:
             digit = self._peek()
         return grammar.NumToken(float("".join(digits)), self._row, self._col)
 
-    def _base(self, __init__: typing.Callable[[str, int, int], grammar.BaseNumToken],
-              *allowed: str) -> typing.Union[grammar.BaseNumToken, grammar.ErrorToken]:
+    def _base(self, __init__: typing.Callable[[str, int, int], grammar.BaseNumToken], *allowed: str) \
+            -> typing.Union[grammar.BaseNumToken, grammar.ErrorToken]:
         allowed = set(x.lower() for x in allowed)
         digits = []
         digit = self._peek()

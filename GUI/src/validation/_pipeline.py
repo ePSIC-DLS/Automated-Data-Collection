@@ -353,3 +353,69 @@ class Pipeline(ts.Base[Src, Dst], vs.Base[Dst], typing.Generic[Src, Dst]):
         """
         return cls(Step(vs.TypeValidator(members), desc=f"ensure the input is a valid {members}"), in_type=typing.Any,
                    out_type=members)
+
+    @classmethod
+    def static_tuple(cls, length: int, element_validation: vs.Base,
+                     element_translation: ts.Base) -> "Pipeline[tuple,tuple]":
+        """
+        Shortcut constructor for creating a pipeline for a tuple of set length with set validation.
+
+        Parameters
+        ----------
+        length: int
+            The number of elements in the tuple.
+        element_validation: Validator[Dst]
+            The per-element validation.
+        element_translation: Translator[Src, Dst]
+            The per-element translator.
+
+        Returns
+        -------
+        Pipeline[tuple, tuple]
+            The pipeline that ensures the tuple has static length and undergoes uniform validation.
+        """
+        return cls(
+            Step(vs.ValueValidator(length), ts.LengthTranslator(), temporary=True,
+                 desc=f"ensure the tuple has {length} elements"),
+            Step(vs.IterableMixin(element_validation), ts.IterableMixin(element_translation),
+                 desc=f"validate each element with {element_validation} and translate it with {element_translation}"),
+            in_type=tuple, out_type=tuple
+        )
+
+    @classmethod
+    def dynamic_tuple(cls, length: int, *sequence: vs.Base) -> "Pipeline[tuple,tuple]":
+        """
+        Shortcut constructor for creating a pipeline for a tuple of set length with differing validation.
+
+        Parameters
+        ----------
+        length: int
+            The number of elements in the tuple.
+        *sequence: Validator
+            The validation for each element.
+
+        Returns
+        -------
+        Pipeline[tuple, tuple]
+            The pipeline that ensures the tuple has static length. Each element has validation, but not uniform.
+
+        Raises
+        ------
+        ValueError
+            If the number of elements in the validation does not match the length of the tuple.
+        """
+
+        if len(sequence) != length:
+            raise ValueError(f"Expected {length} validators")
+
+        def _steps() -> typing.Iterator[Step]:
+            for i, validator in enumerate(sequence):
+                yield Step(validator, ts.KeyTranslator(i, ...), temporary=True,
+                           desc=f"ensure element {i} fits to {validator}")
+
+        return cls(
+            Step(vs.ValueValidator(length), ts.LengthTranslator(), temporary=True,
+                 desc=f"ensure the tuple has {length} elements"),
+            *_steps(),
+            in_type=tuple, out_type=tuple
+        )

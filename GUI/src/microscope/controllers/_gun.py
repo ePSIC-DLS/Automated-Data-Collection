@@ -3,8 +3,34 @@ from .._utils import *
 
 if ONLINE:
     from PyJEM.TEM3 import GUN3
-else:
-    from ..PyJEM.offline.TEM3 import GUN3
+
+
+class GUN3Offline:
+    """
+    Placeholder class to represent an offline connection to the gun.
+    """
+
+    def GetFilamentCurrentValue(self) -> float:
+        """
+        Get the value of the filament.
+
+        Returns
+        -------
+        float
+            Filament value.
+        """
+        return 0.0
+
+    def GetEmissionCurrentValue(self):
+        """
+        Get the value of the emission current.
+
+        Returns
+        -------
+        float
+            Current in microamps.
+        """
+        return 0.0
 
 
 class Controller(Base):
@@ -45,5 +71,8 @@ class Controller(Base):
 
     def __init__(self):
         super().__init__("Gun")
-        self._controller = GUN3()
+        if ONLINE:
+            self._controller = GUN3()
+        else:
+            self._controller = GUN3Offline()
         _ = self.filament, self.emission  # this will prime the keys with an instance

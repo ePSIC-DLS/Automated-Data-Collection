@@ -6,8 +6,100 @@ from ... import validation
 
 if ONLINE:
     from PyJEM.TEM3 import Detector3
-else:
-    from ..PyJEM.offline.TEM3 import Detector3
+
+
+class Detector3Offline:
+    """
+    Placeholder class to represent an offline connection to the detectors.
+    """
+
+    def GetPosition(self, for_: int) -> int:
+        """
+        Get the position of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+
+        Returns
+        -------
+        int
+            The position of the detector.
+        """
+        return 1
+
+    def SetPosition(self, for_: int, inserted: int):
+        """
+        Set the position of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+        inserted: int
+            Whether the detector is inserted.
+        """
+        pass
+
+    def GetBrt(self, for_: int) -> int:
+        """
+        Get the brightness of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+
+        Returns
+        -------
+        int
+            The brightness of the detector.
+        """
+        return 0
+
+    def SetBrt(self, for_: int, brightness: int):
+        """
+        Set the brightness of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+        brightness: int
+            The brightness of the detector.
+        """
+        pass
+
+    def GetCont(self, for_: int) -> int:
+        """
+        Get the contrast of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+
+        Returns
+        -------
+        int
+            The contrast of the detector.
+        """
+        return 0
+
+    def SetCont(self, for_: int, contrast: int):
+        """
+        Set the contrast of a certain detector.
+
+        Parameters
+        ----------
+        for_: int
+            The detector id.
+        contrast: int
+            The contrast of the detector
+        """
+        pass
+
 
 detector = validation.Pipeline.enum(Detector)
 
@@ -99,7 +191,10 @@ class Controller(Base):
 
     def __init__(self, controlling: _tuple[Detector, bool]):
         super().__init__("Detectors")
-        self._controller = Detector3()
+        if ONLINE:
+            self._controller = Detector3()
+        else:
+            self._controller = Detector3Offline()
         self.current = controlling[0]
         self.inserted = controlling[1]
         _ = self.brightness, self.contrast  # this will prime the keys with an instance

@@ -1,11 +1,93 @@
 from .._base import Base
 from .._utils import *
 from ... import validation
+from typing import Tuple as _tuple
 
 if ONLINE:
     from PyJEM.TEM3 import FEG3
-else:
-    from ..PyJEM.offline.TEM3 import FEG3
+
+
+class FEG3Offline:
+    """
+    Placeholder class to represent an offline connection to the FEG system.
+    """
+
+    def GetV1Ready(self) -> int:
+        """
+        Get whether the v1 system is ready.
+
+        Returns
+        -------
+        int
+            Whether the v1 system is ready.
+        """
+        return 1
+
+    def GetEmissionOnStatus(self) -> _tuple[int, int]:
+        """
+        Get whether the emission is on.
+
+        Returns
+        -------
+        tuple[int, int]
+            A tuple depicting the phase and status of the emission.
+        """
+        return 1, 1
+
+    def ExecEmissionOn(self, begin: int):
+        """
+        Execute the emission on procedure.
+
+        Parameters
+        ----------
+        begin: int
+            Whether the process should be started or stopped.
+        """
+        pass
+
+    def SetFEGEmissionOff(self, begin: int):
+        """
+        Execute the emission off procedure.
+
+        Parameters
+        ----------
+        begin: int
+            Whether the process should be started or stopped.
+        """
+        pass
+
+    def GetBeamValve(self) -> int:
+        """
+        Get the status of the beam valve.
+
+        Returns
+        -------
+        int
+            Whether the valve is open.
+        """
+        return 1
+
+    def SetBeamValve(self, new: int):
+        """
+        Change the beam valve status.
+
+        Parameters
+        ----------
+        new: int
+            Whether the valve is open.
+        """
+        pass
+
+    def ExecAutoFlashing(self, begin: int):
+        """
+        Execute the low flash procedure.
+
+        Parameters
+        ----------
+        begin: int
+            Whether the process should be started or stopped.
+        """
+        pass
 
 
 class Controller(Base):
@@ -49,12 +131,11 @@ class Controller(Base):
         ValueError
             If the process errors.
         """
-        phase, status = self._controller.GetEmissionOnStatus()
+        phase, status = self._controller.GetEmissionOnStatus() if not ONLINE else FEG3Offline.GetEmissionOnStatus(...)
         if phase == -1:
             raise ValueError("Process has errored")
-        if not phase:
-            return bool(status)
-        return not status
+        status = bool(status)
+        return status if not phase else not status
 
     @emission.setter
     def emission(self, value: bool):
@@ -87,7 +168,10 @@ class Controller(Base):
 
     def __init__(self, valve: bool = None):
         super().__init__("FEG")
-        self._controller = FEG3()
+        if ONLINE:
+            self._controller = FEG3()
+        else:
+            self._controller = FEG3Offline()
         if valve is not None:
             self.valve = valve
         _ = self.ready, self.emission, self.valve  # this will prime the keys with an instance

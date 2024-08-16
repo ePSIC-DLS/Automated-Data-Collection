@@ -2,17 +2,20 @@ import functools
 import typing
 from typing import Dict as _dict, List as _list
 
-import numpy as np
-
 from ._01_survey import SurveyImage
 from ... import utils
 from ..._base import CanvasPage, images, SettingsPage
 from ..._errors import *
-from .... import validation
+from .... import validation, load_settings
 from ....language import vals
 
 
 class OrderDict(utils.SettingsDict):
+    """
+    Typed dictionary representing the processing pipeline that the survey image undergoes.
+
+    For the keys, see the advanced help of the processing pipeline - as that describes the parameters for each function.
+    """
     order: utils.OrderedGroup[utils.PALFunction]
 
     blur_Height: utils.Spinbox
@@ -68,66 +71,126 @@ class OrderDict(utils.SettingsDict):
     e_gradient_Repeats: utils.Spinbox
 
 
+default_settings = load_settings("assets/config.json",
+                                 blur_call=validation.examples.blur_call,
+                                 gss_blur_call=validation.examples.gss_blur_call,
+                                 sharpen_call=validation.examples.sharpen_call,
+                                 median_call=validation.examples.one_element_call,
+                                 edge_call=validation.examples.one_element_call,
+                                 open_call=validation.examples.morphology_call,
+                                 close_call=validation.examples.morphology_call,
+                                 gradient_call=validation.examples.morphology_call,
+                                 i_gradient_call=validation.examples.morphology_call,
+                                 e_gradient_call=validation.examples.morphology_call,
+                                 blur_order=validation.examples.call_order,
+                                 gss_blur_order=validation.examples.call_order,
+                                 sharpen_order=validation.examples.call_order,
+                                 median_order=validation.examples.call_order,
+                                 edge_order=validation.examples.call_order,
+                                 threshold_order=validation.examples.call_order,
+                                 open_order=validation.examples.call_order,
+                                 close_order=validation.examples.call_order,
+                                 gradient_order=validation.examples.call_order,
+                                 i_gradient_order=validation.examples.call_order,
+                                 e_gradient_order=validation.examples.call_order,
+                                 minima=validation.examples.hist_colours,
+                                 maxima=validation.examples.hist_colours,
+                                 threshold_inversion=validation.examples.any_bool
+                                 )
+
+
 class Order(utils.SettingsPopup):
+    """
+    Concrete popup representing the order and operations in the full processing pipeline.
+
+    Attributes
+    ----------
+    _blur: PALFunction
+        The basic blurring operation. See `GreyImage.transform.blur.basic` for details.
+    _gss_blur: PALFunction
+        The Gaussian blurring operation. See `GreyImage.transform.blur.gaussian` for details.
+    _sharpen: PALFunction
+        The sharpening operation. See `GreyImage.transform.sharpen` for details.
+    _median: PALFunction
+        The median blurring operation. See `GreyImage.transform.blur.median` for details.
+    _edge: PALFunction
+        The edge detection operation. See `GreyImage.grey_transform.threshold.edge_detection` for details.
+    _threshold: PALFunction
+        The intensity thresholding operation. See `GreyImage.grey_transform.threshold.region` for details.
+    _open: PALFunction
+        The morphological opening operation. See `GreyImage.grey_transform.open` for details.
+    _close: PALFunction
+        The morphological closing operation. See `GreyImage.grey_transform.close` for details.
+    _gradient: PALFunction
+        The morphological gradient operation. See `GreyImage.grey_transform.gradient` for details.
+    _i_gradient: PALFunction
+        The morphological internal gradient operation. See `GreyImage.grey_transform.whitehat` for details.
+    _e_gradient: PALFunction
+        The morphological external gradient operation. See `GreyImage.grey_transform.blackhat` for details.
+    _group: OrderedGroup[PALFunction]
+        The actual pipeline to use. Note that as it's an *ordered* group, many pipelines can be created with the same
+        operations.
+    """
 
     def __init__(self, failure_action: typing.Callable[[Exception], None]):
         super().__init__()
 
-        def _transform() -> utils.Enum:
-            return utils.Enum(images.MorphologicalShape, images.MorphologicalShape.RECT)
+        def _transform(start: images.MorphologicalShape) -> utils.Enum:
+            return utils.Enum(images.MorphologicalShape, start)
 
         def _num(init: int, pipe: validation.Pipeline = validation.examples.kernel, step=2) -> utils.Spinbox:
             return utils.Spinbox(init, step, pipe)
 
         def _morph(name: str) -> utils.PALFunction:
-            return utils.PALFunction(name, failure_action,
-                                     Height=_num(5),
-                                     Width=_num(5),
-                                     Shape=_transform(),
-                                     Multiplier=_num(1, validation.examples.morph, 1),
-                                     Repeats=_num(1, validation.examples.morph, 1),
+            call = default_settings[f"{name}_call"]
+            return utils.PALFunction(name, failure_action, default_settings[f"{name}_order"][1],
+                                     Height=_num(call[0]),
+                                     Width=_num(call[1]),
+                                     Shape=_transform(images.MorphologicalShape[call[2]]),
+                                     Multiplier=_num(call[3], validation.examples.morph, 1),
+                                     Repeats=_num(call[4], validation.examples.morph, 1),
                                      )
 
-        self._blur = utils.PALFunction("blur", failure_action,
-                                       Height=_num(5),
-                                       Width=_num(5)
+        self._blur = utils.PALFunction("blur", failure_action, default_settings["blur_order"][1],
+                                       Height=_num(default_settings["blur_call"][0]),
+                                       Width=_num(default_settings["blur_call"][1])
                                        )
-        self._gss_blur = utils.PALFunction("gss_blur", failure_action, True,
-                                           Height=_num(5),
-                                           Width=_num(5),
-                                           Sigma_X=_num(0, validation.examples.sigma, 1),
-                                           Sigma_Y=_num(0, validation.examples.sigma, 1)
+        self._gss_blur = utils.PALFunction("gss_blur", failure_action, default_settings["gss_blur_order"][1],
+                                           Height=_num(default_settings["gss_blur_call"][0]),
+                                           Width=_num(default_settings["gss_blur_call"][1]),
+                                           Sigma_X=_num(default_settings["gss_blur_call"][2], validation.examples.sigma,
+                                                        1),
+                                           Sigma_Y=_num(default_settings["gss_blur_call"][3], validation.examples.sigma,
+                                                        1)
                                            )
-        self._sharpen = utils.PALFunction("sharpen", failure_action,
-                                          Size=_num(5),
-                                          Scale=_num(1, validation.examples.sigma, 1),
-                                          Delta=_num(0, validation.examples.sigma, 1)
+        self._sharpen = utils.PALFunction("sharpen", failure_action, default_settings["sharpen_order"][1],
+                                          Size=_num(default_settings["sharpen_call"][0]),
+                                          Scale=_num(default_settings["sharpen_call"][1], validation.examples.sigma, 1),
+                                          Delta=_num(default_settings["sharpen_call"][2], validation.examples.sigma, 1)
                                           )
-        self._median = utils.PALFunction("median", failure_action,
-                                         Size=_num(5)
+        self._median = utils.PALFunction("median", failure_action, default_settings["median_order"][1],
+                                         Size=_num(default_settings["median_call"][0])
                                          )
-        self._edge = utils.PALFunction("edge", failure_action,
-                                       Size=_num(5)
+        self._edge = utils.PALFunction("edge", failure_action, default_settings["edge_order"][1],
+                                       Size=_num(default_settings["edge_call"][0])
                                        )
-        self._threshold = utils.PALFunction("threshold", failure_action, True)
+        self._threshold = utils.PALFunction("threshold", failure_action, default_settings["threshold_order"][1])
         self._open = _morph("open")
         self._close = _morph("close")
         self._gradient = _morph("gradient")
         self._i_gradient = _morph("i_gradient")
         self._e_gradient = _morph("e_gradient")
-        self._group = utils.OrderedGroup(
-            self._blur,
-            self._gss_blur,
-            self._sharpen,
-            self._median,
-            self._edge,
-            self._threshold,
-            self._open,
-            self._close,
-            self._gradient,
-            self._i_gradient,
-            self._e_gradient
+        fns = (
+            self._blur, self._gss_blur, self._sharpen, self._median, self._edge, self._threshold, self._open,
+            self._close, self._gradient, self._i_gradient, self._e_gradient
         )
+        order = [
+            fns[i - 1] for i, _ in map(default_settings.get, ("blur_order", "gss_blur_order", "sharpen_order",
+                                                              "median_order", "edge_order", "threshold_order",
+                                                              "open_order", "close_order", "gradient_order",
+                                                              "i_gradient_order", "e_gradient_order"))
+        ]
+        self._group = utils.OrderedGroup(*order)
         self._group.orderChanged.connect(lambda _, __: self.settingChanged.emit("order", self._group.get_members()))
         for func in self._group.get_members():
             func.parameterChanged.connect(self.settingChanged.emit)
@@ -153,6 +216,28 @@ class Order(utils.SettingsPopup):
 
 
 class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
+    """
+    Concrete page representing the pre-processing the survey image undergoes.
+
+    The binarisation makes it easier to identify clusters by removing intermediate intensities of noise.
+
+    Attributes
+    ----------
+    _prev: SurveyImage
+        The previous stage in the pipeline, used to check whether a survey image has been captured.
+    _minima_pipe: Pipeline[Any, int]
+        The pipeline describing how the minima value can change.
+    _maxima_pipe: Pipeline[Any, int]
+        The pipeline describing how the maxima value can change.
+    _minima: LabelledWidget[Spinbox]
+        The widget controlling the minima value.
+    _maxima: LabelledWidget[Spinbox]
+        The widget controlling the maxima value.
+    _invert: LabelledWidget[Checkbox]
+        The widget deciding whether the resulting binary image should be inverted.
+    _threshold_inversion: LabelledWidget[Checkbox]
+        An alias for _invert, used to make the attached DSL's variable names clearer.
+    """
     settingChanged = SettingsPage.settingChanged
 
     def __init__(self, size: int, previous: SurveyImage, failure_action: typing.Callable[[Exception], None]):
@@ -180,11 +265,13 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
                                      in_type=int, out_type=int)
         self._minima_pipe = validation.examples.any_int + minima
         self._maxima_pipe = validation.examples.any_int + maxima
-        self._minima = utils.LabelledWidget("Minima", utils.Spinbox(30, 1, self._minima_pipe),
+        self._minima = utils.LabelledWidget("Minima", utils.Spinbox(default_settings["minima"], 1, self._minima_pipe),
                                             utils.LabelOrder.SUFFIX)
-        self._maxima = utils.LabelledWidget("Maxima:", utils.Spinbox(60, 1, self._maxima_pipe),
+        self._maxima = utils.LabelledWidget("Maxima:", utils.Spinbox(default_settings["maxima"], 1, self._maxima_pipe),
                                             utils.LabelOrder.SUFFIX)
-        self._invert = utils.LabelledWidget("Threshold Inversion", utils.CheckBox("&I", False), utils.LabelOrder.SUFFIX)
+        self._invert = utils.LabelledWidget("Threshold Inversion",
+                                            utils.CheckBox("&I", default_settings["threshold_inversion"]),
+                                            utils.LabelOrder.SUFFIX)
 
         self._regular.addWidget(self._minima)
         self._regular.addWidget(self._maxima)
@@ -235,6 +322,19 @@ class ProcessingPipeline(CanvasPage, SettingsPage[Order]):
         CanvasPage.stop(self)
 
     def single_stage(self, name: str) -> typing.Callable[[vals.Number, _list[vals.Value]], vals.Value]:
+        """
+        Perform a single processing step.
+
+        Parameters
+        ----------
+        name: str
+            The function name to perform. This must match a known step.
+
+        Returns
+        -------
+        Callable[[Number, list[Value]], Value]
+            A native function for the DSL to use to perform the processing step.
+        """
         fn = getattr(self, f"_{name}")
 
         def _inner(argc: vals.Number, argv: _list[vals.Value]) -> vals.Value:

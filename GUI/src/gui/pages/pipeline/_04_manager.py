@@ -8,19 +8,46 @@ from ... import utils
 from ..._base import ClusterPage, CanvasPage, SettingsPage, ProcessPage, widgets, gui
 from PyQt5.QtCore import Qt as enums
 from ..._errors import *
-from .... import validation
+from .... import load_settings, validation
 
 
 class FilterDict(utils.SettingsDict):
+    """
+    Typed dictionary representing the advanced cluster management settings.
+
+    Keys
+    ----
+    match: PercentageBox
+        The match factor to apply to the scan regions.
+    order: OrderedGroup[QLabel]
+        The ordering of the clusters.
+    """
     match: utils.PercentageBox
     order: utils.OrderedGroup[widgets.QLabel]
 
 
+default_settings = load_settings("assets/config.json",
+                                 match=validation.examples.match,
+                                 overlap=validation.examples.overlap,
+                                 overlap_directions=validation.examples.flag_3
+                                 )
+
+
 class Filter(utils.SettingsPopup):
+    """
+    Concrete popup representing the advanced clustering settings.
+
+    Attributes
+    ----------
+    _match: PercentageBox
+        The widget controlling the match factor.
+    _order: OrderedGroup[widgets.QLabel]
+        The widget controlling the order.
+    """
 
     def __init__(self, failure_action: typing.Callable[[Exception], None]):
         super().__init__()
-        self._match = utils.PercentageBox(60, validation.examples.match)
+        self._match = utils.PercentageBox(int(default_settings["match"] * 100), validation.examples.match)
         self._match.dataPassed.connect(lambda v: self.settingChanged.emit("match", v))
         self._match.dataFailed.connect(failure_action)
         self._order = utils.OrderedGroup[widgets.QLabel]()
@@ -34,6 +61,40 @@ class Filter(utils.SettingsPopup):
 
 
 class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
+    """
+    Concrete page representing the division of identified clusters from any source.
+
+    Attributes
+    ----------
+    _order: dict[Cluster, int]
+        The mapping from cluster to order of scanning.
+    _clusters: dict[Cluster, tuple[Grid, ...]]
+        The mapping from cluster to scan grid.
+    _selected: ClusterPage | None
+        The selected cluster source.
+    _hardcoded: list[ScanRegion]
+        The scan regions to search.
+    _made: LabelledWidget[QRadioButton]
+        A widget detailing one choice for cluster source - the ones user made.
+    _found: LabelledWidget[QRadioButton]
+        A widget detailing one choice for cluster source - the ones programmatically found.
+    _buttons: QButtonGroup
+        The button group to group the source choices.
+    _choose_segmented: Callable[[], None]
+        A shortcut function to choose the segmented source.
+    _overlap: LabelledWidget[PercentageBox]
+        The widget controlling the percentage of overlap.
+    _overlap_directions: LabelledWidget[XDControl[CheckBox]]
+        The widget controlling what directions of overlap are enabled.
+    _pitch: QLabel
+        The widget showcasing the size of each grid square (in relation to the survey image size).
+    _tighten: QPushButton
+        The button to tighten the grids around each cluster.
+    _export: QPushButton
+        The button to export the selected, tightened grids.
+    _click_all: QPushButton
+        The button to mark all available clusters with grids.
+    """
     settingChanged = SettingsPage.settingChanged
 
     def __init__(self, size: int, made_clusters: SurveyImage, found_clusters: Clusters,
@@ -52,22 +113,28 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._buttons = widgets.QButtonGroup()
         self._buttons.addButton(self._made.focus, 1)
         self._buttons.addButton(self._found.focus, 2)
-        self._buttons.idToggled.connect(functools.partial(self._choose_page, {1: made_clusters, 2: found_clusters}))
+        self._buttons.idClicked.connect(functools.partial(self._choose_page, {1: made_clusters, 2: found_clusters}))
         self._choose_segmented = functools.partial(self._choose_page.py_func,
                                                    {1: made_clusters, 2: found_clusters}, 2, True)
         self._overlap = utils.LabelledWidget("Overlap percentage",
-                                             utils.PercentageBox(10, validation.examples.overlap, step=5),
+                                             utils.PercentageBox(int(default_settings["overlap"] * 100),
+                                                                 validation.examples.overlap, step=5),
                                              utils.LabelOrder.SUFFIX)
         self._overlap_directions = utils.LabelledWidget("Overlap Directions",
                                                         utils.XDControl(3, utils.CheckBox, text="X", initial=True),
                                                         utils.LabelOrder.SUFFIX)
         self._overlap.focus.dataPassed.connect(lambda v: self.settingChanged.emit("overlap", v))
         self._overlap.focus.dataFailed.connect(failure_action)
-        self._overlap_directions.focus.dataPassed.connect(lambda v: self.settingChanged.emit("overlap_directions", v))
-        self._overlap_directions.focus.dataFailed.connect(failure_action)
-        self._overlap_directions.focus.get_widget(1).setText("Y")
-        self._overlap_directions.focus.get_widget(2).setText("XY")
-        self._overlap_directions.focus.get_widget(2).change_data(False)
+        direc = self._overlap_directions.focus
+        direc.dataPassed.connect(lambda v: self.settingChanged.emit("overlap_directions", v))
+        direc.dataFailed.connect(failure_action)
+        direc.get_widget(1).setText("Y")
+        direc.get_widget(2).setText("XY")
+
+        directions = default_settings["overlap_directions"]
+        for i in range(3):
+            direc.get_widget(i).change_data(directions[i])
+
         self._pitch = widgets.QLabel("Grid Size:")
         self._tighten = widgets.QPushButton("&Tighten")
         self._tighten.clicked.connect(lambda: self._tighten_grids())
@@ -92,7 +159,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._canvas.mousePressed.connect(self._click)
 
     def compile(self) -> str:
-        return "mark\ntighten"
+        return "Mark\nTighten"
 
     def run(self):
         pass
@@ -101,8 +168,10 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         CanvasPage.clear(self)
         ProcessPage.clear(self)
         self._hardcoded.clear()
-        self._made.focus.setChecked(False)
         self._found.focus.setChecked(False)
+        self._buttons.idToggled.emit(1, False)
+        self._buttons.idToggled.emit(2, False)
+        self._made.focus.setChecked(False)
         self._pitch.setText("Grid Size:")
 
     def start(self):
@@ -116,9 +185,27 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         ProcessPage.stop(self)
 
     def get_tight(self) -> _tuple[utils.ScanRegion, ...]:
+        """
+        Access the tightened grids.
+
+        Returns
+        -------
+        tuple[ScanRegion, ...]
+            The scan regions ready to export, as an immutable data structure.
+        """
         return tuple(self._hardcoded)
 
     def update_label(self):
+        """
+        Update the pitch size label.
+
+        This will also re-grid each cluster - however, each grid will need to be tightened again.
+
+        Raises
+        ------
+        GUIError
+            If a ValueError occurs during the division.
+        """
         if self._selected is None:
             return
         pitch = self._selected.pitch_size()
@@ -137,10 +224,9 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         self._draw()
 
     @utils.Tracked
-    def _choose_page(self, mapping: _dict[int, ClusterPage], index: int, state: bool) -> None:
+    def _choose_page(self, mapping: _dict[int, ClusterPage], index: int) -> None:
         selected = mapping[index]
-        clusters = selected.get_clusters()
-        if not self._made.focus.isChecked() and not self._found.focus.isChecked():
+        if self._buttons.checkedId() == -1:
             self.runStart.emit()
         order = self._popup.widgets()["order"]
         order.clear_members()
@@ -148,8 +234,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         for cluster in self._order:
             cluster.locked = False
         self._order.clear()
-        if not state:
-            return
+        clusters = selected.get_clusters()
         self._pitch.setText(f"Grid Size: {selected.pitch_size()}")
         for i, cluster in enumerate(clusters, 1):
             order.add_member(widgets.QLabel(str(cluster)))
@@ -193,6 +278,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                     raise GUIError(utils.ErrorSeverity.WARNING, "No grids remaining",
                                    f"{cluster} has no grids remaining after tightening. "
                                    f"Try using a match percentage lower than {match:.0%}")
+                self._draw()
         finally:
             self._draw()
 
@@ -294,6 +380,9 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
         return pitch, overlap, overlaps
 
     def automate_click(self):
+        """
+        Perform a single-threaded click of all clusters.
+        """
         pitch, overlap, overlaps = self._settings()
         for cluster in self._order:
             try:
@@ -301,10 +390,20 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                     cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
                     for off_dir in overlaps
                 )
+                cluster.locked = True
             except ValueError:
                 continue
+        self._draw()
 
     def automate_tighten(self):
+        """
+        Perform a single-threaded tighten and export of all marked clusters.
+
+        Raises
+        ------
+        StagingError
+            If there are no grids to tighten.
+        """
         if self._modified_image is None:
             raise StagingError("tightening grids", "forming grids")
         self._tighten_grids.py_func(None)

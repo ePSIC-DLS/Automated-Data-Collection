@@ -202,6 +202,18 @@ class OrderedGroup(widgets.QWidget, typing.Generic[W]):
         self._draw()
 
     def configure_members(self, get: typing.Callable[[W], object], set_: typing.Callable[[W, object], None], *settings):
+        """
+        Change a specific setting for all members.
+
+        Parameters
+        ----------
+        get: Callable[[W], object]
+            The attribute-getter function for the members.
+        set_: Callable[[W, object], None]
+            The attribute-setter function for the members.
+        *settings: Any
+            The new value of the specific setting for all members.
+        """
         if (exp := len(self._members)) != (acc := len(settings)):
             raise ValueError(f"Expected {exp} elements")
         values = set(map(get, self._members))

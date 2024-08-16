@@ -2,10 +2,26 @@ import typing
 
 from ... import utils
 from ..._base import Page, widgets
-from .... import images, language as language
+from .... import images, language
 
 
 class Scripts(Page):
+    """
+    Concrete page to load and execute DSL scripts.
+
+    Attributes
+    ----------
+    L_NAME: str
+        The language name.
+    _interpreter: Interpreter
+        The script interpreter. This will be used to execute DSL scripts.
+    _prompt: FilePrompt
+        The prompting system for the user to choose a script to run.
+    _output: QTextEdit
+        The widget for displaying script output.
+    _path: str
+        The currently selected filepath.
+    """
     L_NAME = "PAL"
 
     def __init__(self, compilation: typing.Callable[[], str],
@@ -19,8 +35,6 @@ class Scripts(Page):
         def _ready(path_: str):
             self._run_file(path_)
             self._output.clear()
-            self._progress.setValue(0)
-            self._progress.setMaximum(0)
             with open(self._path) as file:
                 program = file.read()
             self._interpreter.run(program)
@@ -31,8 +45,6 @@ class Scripts(Page):
         self._prompt = utils.FilePrompt("GUIAS", block=False,
                                         path=path)
         self._output = widgets.QTextEdit()
-        self._progress = widgets.QProgressBar()
-        self._progress.setRange(0, 0)
         self._output.setFontPointSize(12)
         self._output.setReadOnly(True)
         self._layout.addWidget(self._output, 0, 0)
@@ -43,6 +55,14 @@ class Scripts(Page):
         self._path = ""
 
     def interpreter(self) -> language.Interpreter:
+        """
+        Get the interpreter used.
+
+        Returns
+        -------
+        Interpreter
+            The script interpreter.
+        """
         return self._interpreter
 
     def _run_file(self, path: str):
@@ -149,7 +169,7 @@ class Scripts(Page):
             
             {self.L_NAME} does not support default values for parameters, and assumes all parameters are positional.
             
-            As assignment is a separate expression; 
+            As assignment is a separate expression;
             there is no 'global' or 'nonlocal' keyword for outer scope assignment.
         Iter keyword
             "iter <NAME> '('[<NAME> (',' <NAME>)*]')' <BLOCK>"
@@ -241,6 +261,14 @@ class Scripts(Page):
         return s
 
     def standard_library(self) -> str:
+        """
+        Return a user-friendly description of the standard library within the library.
+
+        Returns
+        -------
+        str
+            The user-friendly information about the Standard Library.
+        """
         s = f"""Functions:
         blur:
             "blur(arg1, arg2)"
@@ -298,6 +326,11 @@ class Scripts(Page):
         correct_for:
             "correct_for(correction)"
             Runs the specified correction. The correction should use one of the correction keywords.
+        stage_snake:
+            "stage_snake(step, size)"
+            Generator for stage movement. Note that this generator does not yield any useful value (just void).
+            The step should be a two-element array, representing the size of each movement.
+            The size should be a two-element array, representing the number of movements.
         
         ----------------------------------------------------------------------------------------------------------------
         

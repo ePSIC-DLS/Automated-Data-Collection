@@ -7,8 +7,162 @@ from typing import Tuple as _tuple
 
 if ONLINE:
     from PyJEM.TEM3 import Stage3
-else:
-    from ..PyJEM.offline.TEM3 import Stage3
+
+
+class Stage3Offline:
+    """
+    Placeholder class to represent an offline connection to the stage.
+    """
+
+    def GetPos(self) -> _tuple[int, int, int, int, int]:
+        """
+        Get the current position of the stage.
+
+        Returns
+        -------
+        tuple[int, int, int, int, int]
+            The x, y, z position of the stage; along with the x, y tilt.
+        """
+        return 0, 0, 0, 0, 0
+
+    def SetX(self, value: int):
+        """
+        Set the x position of the stage.
+
+        Parameters
+        ----------
+        value: int
+            The new x position.
+        """
+        pass
+
+    def SetY(self, value: int):
+        """
+        Set the y position of the stage.
+
+        Parameters
+        ----------
+        value: int
+            The new y position.
+        """
+        pass
+
+    def SetZ(self, value: int):
+        """
+        Set the z position of the stage.
+
+        Parameters
+        ----------
+        value: int
+            The new z position.
+        """
+        pass
+
+    def SetTiltXAngle(self, value: int):
+        """
+        Set the x angle of the stage.
+
+        Parameters
+        ----------
+        value: int
+            The new x angle.
+        """
+        pass
+
+    def SetTiltYAngle(self, value: int):
+        """
+        Set the y angle of the stage.
+
+        Parameters
+        ----------
+        value: int
+            The new y angle.
+        """
+        pass
+
+    def GetDrvMode(self) -> int:
+        """
+        Get the current driver mode.
+
+        Returns
+        -------
+        int
+            The current driver mode identification.
+        """
+        return 0
+
+    def SelDrvMode(self, value: int):
+        """
+        Set the current driver mode.
+
+        Parameters
+        ----------
+        value: int
+            The new driver mode.
+        """
+        pass
+
+    def SetXRel(self, by: int):
+        """
+        Change the x position of the stage by a relative amount.
+
+        Parameters
+        ----------
+        by: int
+            The new x position - expressed as an offset from the current value.
+        """
+        pass
+
+    def SetYRel(self, by: int):
+        """
+        Change the y position of the stage by a relative amount.
+
+        Parameters
+        ----------
+        by: int
+            The new y position - expressed as an offset from the current value.
+        """
+        pass
+
+    def SetZRel(self, by: int):
+        """
+        Change the z position of the stage by a relative amount.
+
+        Parameters
+        ----------
+        by: int
+            The new z position - expressed as an offset from the current value.
+        """
+        pass
+
+    def SetTXRel(self, by: int):
+        """
+        Change the x angle of the stage by a relative amount.
+
+        Parameters
+        ----------
+        by: int
+            The new x angle - expressed as an offset from the current value.
+        """
+        pass
+
+    def SetTYRel(self, by: int):
+        """
+        Change the y angle of the stage by a relative amount.
+
+        Parameters
+        ----------
+        by: int
+            The new y angle - expressed as an offset from the current value.
+        """
+        pass
+
+    def SetOrg(self):
+        """
+        Reset the stage to the original position.
+        """
+        pass
+
 
 axis = validation.Pipeline.enum(Axis)
 driver = validation.Pipeline.enum(Driver)
@@ -127,7 +281,10 @@ class Controller(Base):
 
     def __init__(self, controlling: Axis, active_driver: Driver = None):
         super().__init__("Stage")
-        self._controller = Stage3()
+        if ONLINE:
+            self._controller = Stage3()
+        else:
+            self._controller = Stage3Offline()
         self.axis = controlling
         if active_driver is not None:
             self.driver = active_driver
@@ -192,13 +349,16 @@ class Controller(Base):
         Yields
         ------
         None
-            While this is a generator (to allow iteration over each movement) the value should not be used in the loop
+            While this is a generator (to allow iteration over each movement), the value should not be used in the loop
             or sequence of next statements as it is not important. The generator is used to try to emulate an
             asynchronous procedure similar to how `asyncio` works.
+
+            Note the first yield happens prior to any stage movement, as a "set-up" action
         """
         old_axis = self.axis
         outer_loop, middle_loop, inner_loop = size
         x_am, y_am, z_am = step
+        yield None
         for z in range(outer_loop):
             y_di = -y_am if z % 2 else y_am
             for y in range(middle_loop):
@@ -230,6 +390,10 @@ class Controller(Base):
         ------
         None
             Similar to `snake` the value should not be used.
+
+        See Also
+        --------
+        snake
         """
         yield from self.snake((step[0], step[1], 0), (size[0], size[1], 1))
 

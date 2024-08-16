@@ -6,8 +6,110 @@ from typing import Tuple as _tuple
 
 if ONLINE:
     from PyJEM.TEM3 import Def3
-else:
-    from ..PyJEM.offline.TEM3 import Def3
+
+
+class Def3Offline:
+    """
+    Placeholder class to represent an offline connection to the deflectors.
+    """
+
+    def GetPLA(self) -> _tuple[int, int]:
+        """
+        Get the value of the PLA deflector.
+
+        Returns
+        -------
+        tuple[int, int]
+            The PLA value.
+        """
+        return 0, 0
+
+    def SetPLA(self, x: int, y: int):
+        """
+        Set the value of the PLA deflector.
+
+        Parameters
+        ----------
+        x: int
+            The PLA x-value.
+        y: int
+            The PLA y-value.
+        """
+        pass
+
+    def GetBeamBlank(self) -> int:
+        """
+        Get whether the beam is blanked.
+
+        Returns
+        -------
+        bool
+            The blanked flag.
+        """
+        return 1
+
+    def SetBeamBlank(self, new: int):
+        """
+        Set the value of the beam blank.
+
+        Parameters
+        ----------
+        new: int
+            The blanked flag.
+        """
+        pass
+
+    def SetTemA1CoarseRel(self, x: int, y: int):
+        """
+        Set the value of the TEM A1. This is a relative, coarse adjustment.
+
+        Parameters
+        ----------
+        x: int
+            The TEM A1 x-value.
+        y: int
+            The TEM A2 y-value.
+        """
+        pass
+
+    def SetStemA1CoarseRel(self, x: int, y: int):
+        """
+        Set the value of the STEM A1. This is a relative, coarse adjustment.
+
+        Parameters
+        ----------
+        x: int
+            The STEM A1 x-value.
+        y: int
+            The STEM A2 y-value.
+        """
+        pass
+
+    def SetStemStigA1Rel(self, x: int, y: int):
+        """
+        Set the value of the STEM A1. This is a relative, stig adjustment.
+
+        Parameters
+        ----------
+        x: int
+            The STEM A1 x-value.
+        y: int
+            The STEM A2 y-value.
+        """
+        pass
+
+    def SetTemStigA1Rel(self, x: int, y: int):
+        """
+        Set the value of the TEM A1. This is a relative, stig adjustment.
+
+        Parameters
+        ----------
+        x: int
+            The TEM A1 x-value.
+        y: int
+            The TEM A2 y-value.
+        """
+        pass
 
 
 class Controller(Base):
@@ -62,7 +164,10 @@ class Controller(Base):
 
     def __init__(self, beam_status: bool = None):
         super().__init__("Deflectors")
-        self._controller = Def3()
+        if ONLINE:
+            self._controller = Def3()
+        else:
+            self._controller = Def3Offline()
         if beam_status is not None:
             self.blanked = not beam_status
         _ = self.value, self.blanked  # this will prime the keys with an instance

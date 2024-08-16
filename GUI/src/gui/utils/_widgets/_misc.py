@@ -111,6 +111,14 @@ class FileDialog(widgets.QDialog):
             self.accept()
 
     def select_file(self, path: str):
+        """
+        Public setter for the filepath
+
+        Parameters
+        ----------
+        path: str
+            The new filepath.
+        """
         self._filepath = path
 
 
@@ -258,6 +266,12 @@ class Canvas(widgets.QWidget):
         """
         return self._size
 
+    @image_size.setter
+    def image_size(self, new: _tuple[int, int]):
+        self._size = new
+        self.setFixedSize(*new)
+        self.clear()
+
     def __init__(self, size: _tuple[int, int], *, live_mouse=True):
         self._pixels = gui.QPixmap(*size)
         self._size = size
@@ -277,19 +291,6 @@ class Canvas(widgets.QWidget):
         if exc_type is None:
             self.update()
         return False
-
-    def resize_canvas(self, new: _tuple[int, int]):
-        """
-        Resize the canvas to a new size. This will clear it.
-
-        Parameters
-        ----------
-        new: tuple[int, int]
-            The new canvas size.
-        """
-        self._size = new
-        self.setFixedSize(*new)
-        self.clear()
 
     def mouseMoveEvent(self, a0: gui.QMouseEvent):
         """
@@ -336,7 +337,7 @@ class Canvas(widgets.QWidget):
         painter = gui.QPainter(self)
         painter.drawPixmap(self.rect(), self._pixels)
 
-    def draw(self, image: RGBImage):
+    def draw(self, image: RGBImage, *, resize=False):
         """
         Draws a new image onto the widget.
 
@@ -344,7 +345,11 @@ class Canvas(widgets.QWidget):
         ----------
         image: RGBImage
             The image to be drawn.
+        resize: bool
+            Whether to resize the canvas prior to drawing.
         """
+        if resize:
+            self.image_size = image.size
         if image.size != self._size:
             raise ValueError(f"Expected image size and widget size to match! (got {image.size} and {self._size})")
         elif not isinstance(image, RGBImage):
@@ -377,7 +382,7 @@ class Canvas(widgets.QWidget):
             The greyscale image to calculate the histogram of. Note that full-depth histograms are not supported.
         groups: int
             The number of bins to use in the histogram (default is 15).
-        colour: RGB
+        colour: int_
             The colour to draw the histogram outline in. The fill is always the first colour in the group.
 
         Returns
@@ -416,6 +421,24 @@ class Canvas(widgets.QWidget):
 
 
 class Subplot(widgets.QWidget):
+    """
+    Widget to view multiple canvases in a grid layout.
+
+    Attributes
+    ----------
+    _m: int
+        Column count.
+    _plots: tuple[Canvas, ...]
+        The canvases to plot on.
+    _label: QLabel
+        The title of the plots.
+
+    Raises
+    ------
+    ValueError
+        If only 1 canvas is requested.
+        If the rows or columns are not natural numbers.
+    """
 
     def __init__(self, rows: int, cols: int, *sizes: _tuple[int, int], title: str = None):
         super().__init__()
@@ -436,12 +459,22 @@ class Subplot(widgets.QWidget):
         self.setLayout(layout)
 
     def __getitem__(self, item: _tuple[int, int]) -> Canvas:
+        """
+        Use row-column indexing to get the canvas at a specific grid location.
+
+        Parameters
+        ----------
+        item: tuple[int, int]
+            The row-column reference
+
+        Returns
+        -------
+        Canvas
+            The canvas object at that location.
+        """
         r, c = item
         i = self._m * r + c
         return self._plots[i]
 
     def __iter__(self) -> typing.Iterator[Canvas]:
         yield from self._plots
-
-    def title(self, add: str, sep=" "):
-        self._label.setText(f"{self._label.text()}{sep}{add}")

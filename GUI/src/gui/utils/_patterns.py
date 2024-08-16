@@ -35,9 +35,27 @@ def _line(xy1: _tuple[int, int], xy2: _tuple[int, int], endpoint=False) -> _tupl
 
 
 class Pattern(abc.ABC):
+    """
+    Abstract base class for a lazy object representing a certain drawn pattern.
+
+    All methods are abstract.
+    """
 
     @abc.abstractmethod
     def __contains__(self, other: _tuple[int, int]) -> bool:
+        """
+        Determine if a pattern contains a given point.
+
+        Parameters
+        ----------
+        other: tuple[int, int]
+            The point to check.
+
+        Returns
+        -------
+        bool
+            Whether the point lies in the pattern.
+        """
         pass
 
     @abc.abstractmethod
@@ -46,14 +64,44 @@ class Pattern(abc.ABC):
 
     @abc.abstractmethod
     def decode(self) -> npt.NDArray[np.int_]:
+        """
+        Expand this pattern into a numpy array.
+
+        Returns
+        -------
+        ndarray[int, (r, 2)]
+            The decoded array. Note its shape - r is the number of points in the pattern, but each sublist is a
+            co-ordinate pair.
+        """
         pass
 
     @abc.abstractmethod
     def index(self, elem: _tuple[int, int]) -> int:
+        """
+        Find a particular point in this pattern.
+
+        Parameters
+        ----------
+        elem: tuple[int, int]
+            The element to find.
+
+        Returns
+        -------
+        int
+            The absolute position of the element in the pattern.
+        """
         pass
 
 
 class Point(Pattern):
+    """
+    Concrete pattern representing a singular point.
+
+    Attributes
+    ----------
+    _point: list[int]
+        The 2D co-ordinate of the point.
+    """
 
     def __init__(self, pos: _tuple[int, int]):
         self._point = list(pos)
@@ -72,6 +120,18 @@ class Point(Pattern):
 
 
 class Stroke(Pattern):
+    """
+    Concrete pattern representing a line of points.
+
+    Attributes
+    ----------
+    _start: tuple[int, int]
+        The starting co-ordinate of the line.
+    _end: tuple[int, int]
+        The ending co-ordinate of the line.
+    _inclusive: bool
+        Whether the last point is included in the line.
+    """
 
     def __init__(self, start: _tuple[int, int], end: _tuple[int, int], endpoint=False):
         self._start = start
@@ -103,6 +163,14 @@ class Stroke(Pattern):
                 return i
 
     def reverse(self) -> "Stroke":
+        """
+        Reverse the direction of the line.
+
+        Returns
+        -------
+        Stroke
+            A new line antiparallel to this one, superimposed on top of it.
+        """
         return Stroke(self._end, self._start)
 
 
@@ -110,32 +178,110 @@ P = typing.TypeVar("P", bound=Pattern)
 
 
 class Design(abc.ABC, typing.Generic[P]):
+    """
+    Abstract base class representing a design consisting of a series of patterns.
+
+    Abstract Methods
+    ----------------
+    draw
+    encode
+
+    Generics
+    --------
+    P: Pattern
+        The type of pattern that this design gets encoded to.
+
+    Attributes
+    ----------
+    _size: tuple[int, int]
+        The size of the resulting design.
+    _cov: tuple[float, float]
+        The total coverage of the size. Each element is expected to be between 0 and 1.
+    """
 
     def __init__(self, size: _tuple[int, int], coverage: _tuple[float, float]):
         self._size = size
         self._cov = coverage
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The only common parameter is 'coverage'.
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'coverage', the output is a two-element tuple of floats between 0 and 1.
+        """
         if item == "coverage":
             return self._cov
         raise KeyError(f"{type(self).__name__} has no parameter {item!r}")
 
     @abc.abstractmethod
     def draw(self) -> np.ndarray:
+        """
+        Visualise a binary mask of the pattern.
+
+        Returns
+        -------
+        ndarray[uint8, (y, x)]
+            The binary pattern mask. Note that the size of the array is the size of the pattern.
+        """
         pass
 
     @abc.abstractmethod
     def encode(self) -> _list[P]:
+        """
+        Convert the pattern to a lazy list of co-ordinates.
+
+        Returns
+        -------
+        list[P]
+            The list of pattern objects created by the design.
+        """
         pass
 
 
 class Continuous(Design[Stroke], abc.ABC):
+    """
+    Abstract base class to represent linear-based designs.
+
+    Bound Generics
+    --------------
+    P: Stroke
+
+    Attributes
+    ----------
+    _start: AABBCorner
+        The starting corner of the design.
+    """
 
     def __init__(self, size: _tuple[int, int], start: AABBCorner, coverage: _tuple[float, float]):
         super().__init__(size, coverage)
         self._start = start
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The only continuous parameter is 'start' (and the common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'start', the output is an AABBCorner member.
+        """
         if item == "start":
             return self._start
         return super().__getitem__(item)
@@ -153,10 +299,30 @@ class Continuous(Design[Stroke], abc.ABC):
 
 
 class Discrete(Design[Point], abc.ABC):
+    """
+    Abstract base class to represent static-based designs.
+
+    Bound Generics
+    --------------
+    P: Point
+    """
     pass
 
 
 class Raster(Continuous):
+    """
+    Concrete continuous design representing a raster pattern.
+
+    A raster pattern scans a series of parallel lines, and blanks (has flyback) in diagonal lines.
+    This creates a Z-like shape.
+
+    Attributes
+    ----------
+    _skip: int
+        The number of vertical flyback pixels to have. This should be a natural number.
+    _dir: {"along x", "along y"}
+        The direction of the strokes.
+    """
 
     def __init__(self, size: _tuple[int, int], skip: int, start: AABBCorner,
                  orientation: typing.Literal["along x", "along y"], coverage: _tuple[float, float]):
@@ -165,6 +331,22 @@ class Raster(Continuous):
         self._dir = orientation
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The raster parameters are 'skip' and 'orientation' (along with the continuous and common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'skip', the output is a natural integer.
+            For 'orientation', the output is "along x" or "along y"
+        """
         if item == "skip":
             return self._skip
         elif item == "orientation":
@@ -193,6 +375,19 @@ class Raster(Continuous):
 
 
 class Snake(Continuous):
+    """
+    Concrete continuous design representing a snake pattern.
+
+    A snake pattern scans a series of antiparallel lines, and blanks (has flyback) in perpendicular lines.
+    This creates a 3-sided square shape.
+
+    Attributes
+    ----------
+    _skip: int
+        The number of vertical flyback pixels to have. This should be a natural number.
+    _dir: {"along x", "along y"}
+        The direction of the strokes.
+    """
 
     def __init__(self, size: _tuple[int, int], skip: int, start: AABBCorner,
                  orientation: typing.Literal["along x", "along y"], coverage: _tuple[float, float]):
@@ -201,6 +396,22 @@ class Snake(Continuous):
         self._dir = orientation
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The snake parameters are 'skip' and 'orientation' (along with the continuous and common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'skip', the output is a natural integer.
+            For 'orientation', the output is "along x" or "along y"
+        """
         if item == "skip":
             return self._skip
         elif item == "orientation":
@@ -233,6 +444,20 @@ class Snake(Continuous):
 
 
 class Spiral(Continuous):
+    """
+    Concrete continuous design representing a square spiral pattern.
+
+    A spiral pattern scans in two sets of antiparallel lines, with each set being perpendicular to each other. It has no
+    blank (flyback) zones. Each stroke is shorter than the last.
+    This creates a square pattern that slowly decreases in size.
+
+    Attributes
+    ----------
+    _skip: int
+        The number of pixels to decrease each line by every iteration.
+    _orientation: {"outside-in", "inside-out"}
+        The direction of the strokes.
+    """
 
     def __init__(self, size: _tuple[int, int], skip: int, start: AABBCorner,
                  orientation: typing.Literal["outside-in", "inside-out"], coverage: _tuple[float, float]):
@@ -241,6 +466,22 @@ class Spiral(Continuous):
         self._orientation = orientation
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The spiral parameters are 'skip' and 'orientation' (along with the continuous and common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'skip', the output is a natural integer.
+            For 'orientation', the output is "outside-in" or "inside-out"
+        """
         if item == "skip":
             return self._skip
         elif item == "orientation":
@@ -315,6 +556,27 @@ class Spiral(Continuous):
 
 
 class Grid(Discrete):
+    """
+    Concrete discrete design representing a grid pattern.
+
+    A grid pattern scans a series of discrete points.
+
+    Attributes
+    ----------
+    _gap: tuple[int, int]
+        The amount of gap (in pixels) between each grid point.
+    _shift: tuple[int, int]
+        The number of pixels offset from the top-left corner the grid starts.
+    _order: {"row-major (++)", "row-major (-+)", "row-major (+-)", "row-major (--)", "column-major (++)",
+             "column-major (-+)", "column-major (+-)", "column-major (--)"}
+        The order of the grid points. This has no visual ordering, but instead controls the encoding order.
+        A "row-major" order implies that it scans in rows (the resetting axis is 1).
+        A "column-major" order implies that it scans in columns (the resetting axis is 0).
+        A "++" order implies that 0:0 is counted from the top left.
+        A "-+" order implies that 0:0 is counted from the bottom left.
+        A "+-" order implies that 0:0 is counted from the top right.
+        A "--" order implies that 0:0 is counted from the bottom right.
+    """
 
     def __init__(self, size: _tuple[int, int], gap: _tuple[int, int], shift: _tuple[int, int],
                  order: typing.Literal[
@@ -328,6 +590,24 @@ class Grid(Discrete):
         self._order = order
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The grid parameters are 'gap', 'shift' and 'order' (along with the common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'gap', the output is a two-element tuple of positive integers.
+            For 'shift', the output is a two-element tuple of positive integers.
+            For 'order', the output is "row-major (++)", "row-major (-+)", "row-major (+-)", "row-major (--)",
+            "column-major (++)", "column-major (-+)", "column-major (+-)" or "column-major (--)"
+        """
         if item == "gap":
             return self._gap
         elif item == "shift":
@@ -370,6 +650,23 @@ class Grid(Discrete):
 
 
 class Random(Discrete):
+    """
+    Concrete discrete design formed from a random distribution.
+
+    Attributes
+    ----------
+    _r_type: RandomTypes
+        The type of random distribution to use.
+    _points: tuple[ndarray[int, (m, 2)], ndarray[int, (m, 2)] | None
+        The stored points for refreshing the design. Note the shape is `m` and not `n`. As `n` is the maximum number of
+        points formed, the assumption is that `0 ≤ m < n`.
+    _n: int
+        The maximum number of points to form.
+    _params: dict[str, Any]
+        The distribution-specific parameters.
+    _generator: Generator
+        The random number generator to use.
+    """
 
     def __init__(self, size: _tuple[int, int], r_type: RandomTypes, n: int, coverage: _tuple[float, float], **kwargs):
         super().__init__(size, coverage)
@@ -380,6 +677,22 @@ class Random(Discrete):
         self._generator = np.random.default_rng()
 
     def __getitem__(self, item: str):
+        """
+        Extract a particular parameter from the design.
+
+        Parameters
+        ----------
+        item: str
+            The parameter to extract.
+            The random parameters are 'r_type' and 'n' (along with the chosen distribution and common parameters).
+
+        Returns
+        -------
+        Any
+            The value of the parameter.
+            For 'r_type', the output is a RandomTypes member.
+            For 'n', the output is a natural integer.
+        """
         if item == "r_type":
             return self._r_type
         elif item == "n":

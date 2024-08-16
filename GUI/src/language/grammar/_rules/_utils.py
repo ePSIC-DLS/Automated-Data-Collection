@@ -1,6 +1,6 @@
 import abc as _abc
 from enum import auto as _member, Enum as _Base
-from typing import (Iterator as _iter, List as _list, Optional as _None, Tuple as _tuple, Type as _type,
+from typing import (Iterator as _iter, Optional as _None, Tuple as _tuple, Type as _type,
                     TypeVar as _GenVar, Union as _Union)
 
 from .. import _predicates as _p, _tokens as _t, OpCodes as _Byte
@@ -19,9 +19,11 @@ class Precedence(_Base):
 
     STATEMENT
 
-    GROUP
+    CMP
 
     ASSIGN
+
+    TERM
 
     EXPONENT
 
@@ -41,20 +43,84 @@ class Precedence(_Base):
 
 
 class FuncType(_Base):
+    """
+    Enumeration to represent various function types.
+
+    Members
+    -------
+    SCRIPT
+
+    FUNCTION
+
+    GENERATOR
+
+    """
     SCRIPT = _member()
     FUNCTION = _member()
     GENERATOR = _member()
 
 
 class Compiler:
+    """
+    Class representing a variable compiler. This compiler resolves scoping of local variables.
+
+    A compiler can be used as a context manager to create a new scope for a limited time.
+    To create a new scope, it begins by increasing the scope depth, and ends by decreasing it back to its original
+    level, as well as popping all local variables.
+
+    Attributes
+    ----------
+    _enclosing: Compiler | None
+        The enclosing compiler. As compilers can be nested, so can scopes.
+    _count: int
+        The number of local variables defined in this compiler.
+    _depth: int
+        The current scope depth of this compiler. Note that this allows two ways to nest variables - compiler nesting
+        (when creating functions and generators) and increasing the scope depth (when creating other local scopes).
+    _locals: list[Local]
+        The local variables defined in this compiler.
+    _owner: Consumer
+        The consumer that owns this compiler.
+    _function: Function | Generator
+        The function or generator that defines this compiler.
+    _type: FuncType
+        The function type for this compiler.
+    """
+
     class Local:
+        """
+        Class representing a local variable.
+
+        Attributes
+        ----------
+        _name: Token
+            The token representing the name of the variable.
+        _depth: int
+            The scope depth of the variable. It is -1 if this variable is declared but not defined.
+        """
 
         @property
         def name(self) -> _t.Token:
+            """
+            Public access to the name of the variable.
+
+            Returns
+            -------
+            Token
+                The token representing the name of the variable.
+            """
             return self._name
 
         @property
         def depth(self) -> int:
+            """
+            Public access to the scope depth of the variable.
+
+            Returns
+            -------
+            int
+                The scope depth of the variable. It is -1 if this variable is declared but not defined.
+            """
             return self._depth
 
         @depth.setter
@@ -72,31 +138,67 @@ class Compiler:
 
     @property
     def scope_depth(self) -> int:
+        """
+        Public access to the compiler's scope depth.
+
+        Returns
+        -------
+        int
+            The current scope depth of this compiler, which will be the depth of all defined locals until changed.
+        """
         return self._depth
 
     @property
-    def function(self) -> _objects.Function:
+    def function(self) -> _Union[_objects.Function, _objects.Generator]:
+        """
+        Public access to the chunk-based object for this compiler.
+
+        Returns
+        -------
+        Function | Generator
+            The function or generator that defines this compiler.
+        """
         return self._function
 
     @property
     def enclosing(self) -> _None["Compiler"]:
+        """
+        Public access to this compiler's parent scope.
+
+        Returns
+        -------
+        Compiler | None
+            The enclosing compiler.
+        """
         return self._enclosing
 
     @enclosing.setter
     def enclosing(self, value: "Compiler"):
         self._enclosing = value
 
+    @property
+    def type(self) -> FuncType:
+        """
+        Public access to the particular compiler type.
+
+        Returns
+        -------
+        FuncType
+            The function type for this compiler.
+        """
+        return self._type
+
     def __init__(self, owner: "Consumer", ty: FuncType, enclosing: "Compiler" = None):
         self._enclosing = enclosing
         self._count = 1
         self._depth = 0
-        self._locals: _list[Compiler.Local] = [Compiler.Local(_t.IdentifierToken("", 0, 0), 0)]
+        self._locals = [Compiler.Local(_t.IdentifierToken("", 0, 0), 0)]
         self._owner = owner
         if ty == FuncType.GENERATOR:
             self._function = _objects.Generator()
         else:
             self._function = _objects.Function()
-        self.type = ty
+        self._type = ty
 
     def __iter__(self) -> _iter["Compiler.Local"]:
         yield from reversed(self._locals)
@@ -111,9 +213,15 @@ class Compiler:
         return len(self._locals) - 1
 
     def begin(self):
+        """
+        Increases the scope depth to mark a new scope beginning.
+        """
         self._depth += 1
 
     def end(self):
+        """
+        Decreases the scope depth to mark a new scope ending. Will also pop all local variables created in the scope.
+        """
         self._depth -= 1
         while self._count > 0 and self._locals[-1].depth > self._depth:
             self._locals.pop()
@@ -121,19 +229,43 @@ class Compiler:
             self._owner.emit(_Byte.POP)
 
     def add_local(self, local: "Compiler.Local"):
+        """
+        Adds a local variable to the current scope.
+
+        Parameters
+        ----------
+        local: Local
+            The local variable to add.
+        """
         self._locals.append(local)
         self._count += 1
 
     def pop(self):
+        """
+        Pops this function by emitting a return.
+        """
         self._owner.emit_return()
         # if not self._owner.errored:
         #     self._function.raw.disassemble(self._function.name.raw or "top-level")
 
     def iterate(self) -> _iter[_tuple[int, "Compiler.Local"]]:
+        """
+        Iterates over the local variables defined in this compiler.
+
+        This will go in reverse order from the most nested scope to the least.
+
+        Yields
+        ------
+        tuple[int, Local]
+            The local variable and its index in the compiler.
+        """
         i_l_map = enumerate(self._locals)
         yield from reversed(tuple(i_l_map))
 
     def mark(self):
+        """
+        Marks the most recently added local variable as defined.
+        """
         if self._depth == 0:
             return
         self._locals[-1].depth = self._depth
@@ -141,7 +273,7 @@ class Compiler:
 
 class Consumer(_abc.ABC):
     """
-    Abstract class for a consumer that will analyse a token stream and return an AST.
+    Abstract class for a consumer that will analyse a token stream and emit a bytecode representation.
 
     All methods are abstract.
     """
@@ -158,27 +290,23 @@ class Consumer(_abc.ABC):
         ----------
         precedence: Precedence | None
             The precedence level required.
-
-        Returns
-        -------
-        Expr
-            The expression found.
         """
         pass
 
     @_abc.abstractmethod
     def buffer(self):
+        """
+        Method to act as a parsing buffer for new lines.
+
+        As the language uses new lines as statement ends, this ensures that successive new lines after a scope are not
+        perceived as a syntax error.
+        """
         pass
 
     @_abc.abstractmethod
     def block(self):
         """
         Method to parse a block of code.
-
-        Returns
-        -------
-        BlockStmt
-            The parsed block.
         """
         pass
 
@@ -218,7 +346,7 @@ class Consumer(_abc.ABC):
 
         Returns
         -------
-        Precedence
+        int
             The precedence of the current expression.
         """
         pass
@@ -229,6 +357,8 @@ class Consumer(_abc.ABC):
         This will check to see if the next token is expected, then consume it.
 
         If not expected, it will report an error.
+
+        Within the message, the predicate can be accessed by using `{filter}`.
 
         Generics
         --------
@@ -257,6 +387,8 @@ class Consumer(_abc.ABC):
         This will check to see if the next token is expected, then consume it.
 
         If not expected, it will report an error.
+
+        Within the message, the parsing token of the type can be accessed by using `{lookup}`.
 
         Parameters
         ----------
@@ -316,28 +448,90 @@ class Consumer(_abc.ABC):
 
     @_abc.abstractmethod
     def emit(self, *code: _Union[int, _Byte]):
+        """
+        Emit a series of instructions
+
+        Parameters
+        ----------
+        *code: int | OpCodes
+            The instructions to emit. Note that while opcodes are actual instructions (and integers are operands), they
+            are demoted to integers to be emitted.
+        """
         pass
 
     @_abc.abstractmethod
     def emit_return(self, byte=_Byte.RETURN):
+        """
+        Signal the end of a series of instructions by emitting a return value.
+
+        Parameters
+        ----------
+        byte: OpCodes
+            The type of return to emit. Note that it is expected for this to be a `RETURN` or a `YIELD`.
+        """
         pass
 
     @_abc.abstractmethod
     def emit_loop(self, start: int):
+        """
+        Emit a loop instruction. Note that while jumps have to be patched later, loops know their jump when emitted.
+
+        Parameters
+        ----------
+        start: int
+            The starting index of the loop. This is used to work out the number of instructions to jump.
+        """
         pass
 
     @_abc.abstractmethod
     def emit_jump(self, instruction: _Byte) -> int:
+        """
+        Emit a jump instruction. Note that the operand also emitted is a placeholder, as the jump is unknown.
+
+        Parameters
+        ----------
+        instruction: OpCodes
+            The type of jump to emit.
+
+        Returns
+        -------
+        int
+            The index of the jump instruction, so that it can be patched later.
+        """
         pass
 
     @_abc.abstractmethod
     def patch_jump(self, index: int):
+        """
+        Patch a jump instruction. This is when the placeholder instruction is fixed to know the exact jump.
+
+        Parameters
+        ----------
+        index: int
+            The index of the jump instruction.
+        """
         pass
 
     @_abc.abstractmethod
     def error(self, msg: str):
+        """
+        Send the parser into an error-fuelled panic, with a message to the end user.
+
+        Parameters
+        ----------
+        msg: str
+            The error message.
+        """
         pass
 
     @_abc.abstractmethod
     def pop(self) -> _objects.Function:
+        """
+        Pop the function from the compiler. This signals the end of a function's scope.
+
+        Returns
+        -------
+        Function
+            The function who's scope just ended.
+        """
         pass

@@ -1,5 +1,6 @@
+import functools
 import typing
-from typing import Dict as _dict
+from typing import Dict as _dict, Tuple as _tuple
 
 from ... import utils
 from ..._base import SettingsPage, widgets, core
@@ -47,11 +48,25 @@ def _sub_unit(value: str) -> float:
 
 
 class Sources(widgets.QWidget):
+    """
+    Widget representing the TTL communication source for a particular connection.
+
+    Attributes
+    ----------
+    _choices: tuple[QRadioButton, ...]
+        The available sources.
+    _input: ComboBox[int]
+        The TTL input trigger values.
+    _output: ComboBox[int]
+        The TTL output trigger values.
+    _clock: Enum[EdgeType]
+        The type of pixel clock trigger.
+    """
 
     def __init__(self):
         super().__init__()
         layout = widgets.QGridLayout()
-        self._choices = [widgets.QRadioButton(name) for name in ("TTLInput", "TTLOutput", "PixelClock")]
+        self._choices = tuple(widgets.QRadioButton(name) for name in ("TTL&Input", "TTL&Output", "Pi&xelClock"))
         self._input = utils.ComboBox(*range(5))
         self._output = utils.ComboBox(*range(8))
         self._clock = utils.Enum(microscope.EdgeType, microscope.EdgeType.RISING)
@@ -63,6 +78,14 @@ class Sources(widgets.QWidget):
         self.setLayout(layout)
 
     def get_data(self) -> microscope.TriggerSource:
+        """
+        Get a trigger source based on the widget's state.
+
+        Returns
+        -------
+        TriggerSource
+            The source of a trigger.
+        """
         if self._choices[0].isChecked():
             return microscope.TTLInput(self._input.get_data())
         elif self._choices[1].isChecked():
@@ -86,6 +109,31 @@ class Sources(widgets.QWidget):
 
 
 class ConnectionManager(widgets.QWidget):
+    """
+    Widget managing a singular TTL connection.
+
+    Signals
+    -------
+    exported: dict[str, Any]
+        The exported connection parameters.
+
+    Attributes
+    ----------
+    _mode: LabelledWidget[Enum[TTLMode]]
+        The connection mode.
+    _source: LabelledWidget[Source]
+        The connection source.
+    _active: LabelledWidget[Spinbox]
+        The active time.
+    _delay: LabelledWidget[Spinbox]
+        The delay prior to activation.
+    _count: LabelledWidget[Spinbox]
+        The number of pulses to send.
+    _export: QPushButton
+        The button to export and save the connection.
+    _enabled: QPushButton
+        The button to enable/disable the connection.
+    """
     exported = core.pyqtSignal(dict)
 
     def __init__(self, index: int):
@@ -131,7 +179,7 @@ class ConnectionManager(widgets.QWidget):
                                            utils.Spinbox(1e-3, 1e-3, validation.examples.natural_float,
                                                          display=(_add_unit, _sub_unit)),
                                            utils.LabelOrder.PREFIX)
-        self._count = utils.LabelledWidget("Pulse Count", utils.Spinbox(1, 1, validation.examples.any_int),
+        self._count = utils.LabelledWidget("Pulse Count", utils.Spinbox(1, 1, validation.examples.natural_int),
                                            utils.LabelOrder.PREFIX)
         self._export = widgets.QPushButton("E&xport")
         self._enabled = widgets.QCheckBox("E&nabled")
@@ -152,19 +200,36 @@ class ConnectionManager(widgets.QWidget):
 
 
 class Scanner(SettingsPage):
+    """
+    Concrete page with settings to interface with the scan engine.
+
+    _scanner: Scanner
+        The actual scan engine.
+    _mic: Microscope
+        The link to the microscope.
+    _stage: LabelledWidget[XDControl[Spinbox]]
+        The controller for the stage position.
+    _exposure: LabelledWidget[Spinbox]
+        The dwell time of normal scans.
+    _flyback: LabelledWidget[Spinbox]
+        The flyback time for scans.
+    _connections: tuple[QPushButton, ...]
+        A series of buttons, each triggering a specific TTL connection to be configured.
+    _connected: tuple[ConnectionManager, ...]
+        A series of popups to control a TTL connection.
+    """
     settingChanged = SettingsPage.settingChanged
 
     def __init__(self, mic: microscope.Microscope, scanner: microscope.Scanner):
-        def _open():
-            for cnc in self._connected:
-                if cnc.isVisible():
-                    cnc.raise_()
-                else:
-                    cnc.show()
-
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
         self._scanner = scanner
         self._mic = mic
+
+        self._stage = utils.LabelledWidget("Stage Position",
+                                           utils.XDControl(3, utils.Spinbox, initial=0, step=1,
+                                                           pipeline=validation.examples.stage_pos),
+                                           utils.LabelOrder.SUFFIX)
+        self._stage.focus.dataPassed.connect(self._stage_moved)
 
         self._exposure = utils.LabelledWidget("Dwell Time",
                                               utils.Spinbox(self._scanner.dwell_time, 100e-6,
@@ -176,18 +241,94 @@ class Scanner(SettingsPage):
                                                            self._scanner.inhibit_validation(),
                                                            display=(_add_unit, _sub_unit)),
                                              utils.LabelOrder.SUFFIX)
-        self._connections = utils.LabelledWidget("Connected Peripherals", widgets.QPushButton("0" * 10),
-                                                 utils.LabelOrder.SUFFIX)
+        self._connections = tuple(widgets.QPushButton("0") for _ in range(10))
+        lay = widgets.QHBoxLayout()
+        wid = widgets.QWidget()
+        for cnc_i, cnctn in enumerate(self._connections):
+            if cnc_i == 6:
+                cnctn.setEnabled(False)
+            cnctn.clicked.connect(functools.partial(lambda x: self._display_popup(self._connected[x]), cnc_i))
+            lay.addWidget(cnctn)
+        wid.setLayout(lay)
         self._exposure.focus.dataPassed.connect(lambda v: self._write("dwell_time", v))
         self._flyback.focus.dataPassed.connect(lambda v: self._write("flyback", v))
         self._regular.addWidget(self._exposure)
         self._regular.addWidget(self._flyback)
-        self._regular.addWidget(self._connections)
-        self._connections.focus.clicked.connect(_open)
+        self._regular.addWidget(utils.LabelledWidget("Peripheral Management", wid, utils.LabelOrder.SUFFIX))
+        self._regular.addWidget(self._stage)
         self._connected = tuple(ConnectionManager(i) for i in range(10))
         for cnctn in self._connected:
             cnctn.exported.connect(self._add_connection)
         self.setLayout(self._layout)
+        self.read()
+
+    def read(self):
+        """
+        Re-read the actual settings from the scan engine, and import the data to the widgets.
+        """
+        self._exposure.focus.change_data(self._scanner.dwell_time)
+        self._flyback.focus.change_data(self._scanner.flyback)
+        for ln, cnctn in zip(self._scanner.lines, self._connections):
+            cnctn.setText(ln)
+        xyz = [0, 0, 0]
+        stage = self._mic.subsystems["Stage"]
+        with stage.switch_axis(microscope.Axis.X):
+            with stage.switch_axis(microscope.Axis.Y):
+                with stage.switch_axis(microscope.Axis.Z):
+                    xyz[2] = stage.pos
+                xyz[1] = stage.pos
+            xyz[0] = stage.pos
+        self._stage.focus.change_data(tuple(xyz))
+
+    def stop(self):
+        SettingsPage.stop(self)
+        for cnc in self._connected:
+            cnc.close()
+
+    def compile(self) -> str:
+        return ""
+
+    def all_settings(self) -> typing.Iterator[str]:
+        yield from ()
+
+    def run(self):
+        pass
+
+    def clear(self):
+        pass
+
+    def scan(self, area: microscope.ScanType, detector_status: bool) -> images.GreyImage:
+        """
+        Perform a scan using the scan engine, configured to certain settings.
+
+        This configuration of settings is the GUI's idea of an image scan.
+
+        Parameters
+        ----------
+        area: ScanType
+            The area to scan.
+        detector_status: bool
+            Whether the currently active detector is inserted.
+
+        Returns
+        -------
+        GreyImage
+            The scanned image.
+        """
+        with self._scanner.switch_scan_area(area):
+            with self._scanner.switch_dwell_time(self._exposure.focus.get_data()):
+                with self._mic.subsystems["Deflectors"].switch_blanked(False):
+                    with self._mic.subsystems["Detectors"].switch_inserted(detector_status):
+                        return self._scanner.scan()
+
+    def _stage_moved(self, xyz: _tuple[int, int, int]):
+        stage = self._mic.subsystems["Stage"]
+        with stage.switch_axis(microscope.Axis.X):
+            with stage.switch_axis(microscope.Axis.Y):
+                with stage.switch_axis(microscope.Axis.Z):
+                    stage.pos = xyz[2]
+                stage.pos = xyz[1]
+            stage.pos = xyz[0]
         self.read()
 
     @utils.Tracked
@@ -203,35 +344,6 @@ class Scanner(SettingsPage):
             connection.deactivate()
         self.read()
 
-    def read(self):
-        self._exposure.focus.change_data(self._scanner.dwell_time)
-        self._flyback.focus.change_data(self._scanner.flyback)
-        self._connections.focus.setText(self._scanner.lines)
-
     def _write(self, prop: str, value):
         setattr(self._scanner, prop, value)
         self.read()
-
-    def close(self):
-        for cnc in self._connected:
-            cnc.close()
-        super().close()
-
-    def compile(self) -> str:
-        return ""
-
-    def all_settings(self) -> typing.Iterator[str]:
-        yield from ()
-
-    def run(self):
-        pass
-
-    def clear(self):
-        pass
-
-    def scan(self, area: microscope.ScanType, detector_status: bool) -> images.GreyImage:
-        with self._scanner.switch_scan_area(area):
-            with self._scanner.switch_dwell_time(self._exposure.focus.get_data()):
-                with self._mic.subsystems["Deflectors"].switch_blanked(False):
-                    with self._mic.subsystems["Detectors"].switch_inserted(detector_status):
-                        return self._scanner.scan()

@@ -14,10 +14,8 @@ class PrefixRule(_Gen[_T], _abc.ABC):
 
     Generics
     --------
-    _E: Expr
-        The expression type returned.
     _T: Token
-        The token type previously consumed. Is usually the type of expression (as Expr is generic itself)
+        The token type previously consumed.
 
     Abstract Methods
     ----------------
@@ -35,11 +33,9 @@ class PrefixRule(_Gen[_T], _abc.ABC):
             The consumer that can parse tokens.
         token: _T
             The previously consumed token.
-
-        Returns
-        -------
-        _E
-            The expression parsed from the token stream.
+        allowed_assignment: bool
+             Whether this rule can turn into an assignment (for instance "x" can turn into "x = 3", but "-b" can't turn
+             into "-b = 3").
         """
         pass
 
@@ -61,8 +57,6 @@ class NumberRule(PrefixRule[_t.BaseNumToken]):
 
     Bound Generics
     --------------
-    _E: NumberExpr
-
     _T: BaseNumToken
     """
 
@@ -76,8 +70,6 @@ class UnaryOperatorRule(PrefixRule[_t.Token]):
 
     Bound Generics
     --------------
-    _E: UnaryExpr
-
     _T: Token
     """
 
@@ -95,8 +87,6 @@ class GroupRule(PrefixRule[_t.Token]):
 
     Bound Generics
     --------------
-    _E: GroupExpr
-
     _T: Token
     """
 
@@ -111,9 +101,7 @@ class KeywordRule(PrefixRule[_t.KeywordToken]):
 
     Bound Generics
     --------------
-    _E: GroupExpr
-
-    _T: Token
+    _T: KeywordToken
     """
 
     def parse(self, parser: Consumer, token: _t.KeywordToken, allowed_assignment: bool):
@@ -126,6 +114,18 @@ class KeywordRule(PrefixRule[_t.KeywordToken]):
 
 
 class CharRule(PrefixRule[_t.StringToken]):
+    """
+    Concrete rule for parsing prefix string-based expressions.
+
+    Bound Generics
+    --------------
+    _T: StringToken
+
+    Attributes
+    ----------
+    _cls: type[Value[str]]
+        The value type to construct.
+    """
 
     def __init__(self, cls: _type[_v.Value[str]]):
         self._cls = cls
@@ -136,12 +136,31 @@ class CharRule(PrefixRule[_t.StringToken]):
 
 
 class VarRule(PrefixRule[_t.IdentifierToken]):
+    """
+    Concrete rule for parsing variable-based prefix expressions.
+
+    Bound Generics
+    --------------
+    _T: IdentifierToken
+    """
 
     def parse(self, parser: Consumer, token: _t.IdentifierToken, allowed_assignment: bool):
         self.parse_var(parser, token, allowed_assignment)
 
     @classmethod
     def parse_var(cls, parser: Consumer, token: _t.IdentifierToken, allowed_assignment: bool):
+        """
+        Static method to parse variables.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that can parse tokens.
+        token: IdentifierToken
+            The previously consumed token.
+        allowed_assignment: bool
+            Whether assignment is allowed in this expression.
+        """
         if (constant := cls.resolve(parser, token)) != -1:
             get, set_ = _Byte.GET_LOCAL, _Byte.SET_LOCAL
         else:
@@ -156,6 +175,21 @@ class VarRule(PrefixRule[_t.IdentifierToken]):
 
     @classmethod
     def resolve(cls, parser: Consumer, token: _t.IdentifierToken) -> int:
+        """
+        Static method to resolve a variable's depth.
+
+        Parameters
+        ----------
+        parser: Consumer
+            The consumer that stores the variables.
+        token: IdentifierToken
+            The variable identifier.
+
+        Returns
+        -------
+        int
+            The depth of the variable. This is -1 for global variables.
+        """
         for i, local in parser.compiler.iterate():
             if local.name.src == token.src:
                 if local.depth == -1:
@@ -165,6 +199,13 @@ class VarRule(PrefixRule[_t.IdentifierToken]):
 
 
 class ListRule(PrefixRule[_t.Token]):
+    """
+    Concrete rule for parsing prefix square bracket expressions.
+
+    Bound Generics
+    --------------
+    _T: Token
+    """
 
     def parse(self, parser: Consumer, token: _T, allowed_assignment: bool):
         array = parser.chunk.add(_v.Array())
