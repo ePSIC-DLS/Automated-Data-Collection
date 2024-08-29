@@ -1,0 +1,8 @@
+﻿[
+  {
+    "name": "detector",
+    "ip": "10.182.0.1",
+    "port": 49226,
+    "uri": "DetectorRESTService/Detector"
+  }
+]

@@ -1,0 +1,201 @@
+{
+  "size": 512,
+  "cluster_colour": "#FF0000",
+  "marker_colour": "#00FF00",
+  "histogram_outline": "#FFFFFF",
+  "pattern_colour": "#00FF00",
+  "init_dwell": 15e-6,
+  "finished_colour": "#FFFF00",
+  "engine_type": "QD",
+  "microscope": false,
+  "num_groups": 17,
+  "blur_call": [
+    5,
+    5
+  ],
+  "gss_blur_call": [
+    5,
+    5,
+    0,
+    0
+  ],
+  "sharpen_call": [
+    5,
+    1,
+    0
+  ],
+  "median_call": [
+    5
+  ],
+  "edge_call": [
+    5
+  ],
+  "open_call": [
+    5,
+    5,
+    "RECT",
+    1,
+    1
+  ],
+  "close_call": [
+    5,
+    5,
+    "RECT",
+    1,
+    1
+  ],
+  "gradient_call": [
+    5,
+    5,
+    "RECT",
+    1,
+    1
+  ],
+  "i_gradient_call": [
+    5,
+    5,
+    "RECT",
+    1,
+    1
+  ],
+  "e_gradient_call": [
+    5,
+    5,
+    "RECT",
+    1,
+    1
+  ],
+  "blur_order": [
+    1,
+    false
+  ],
+  "gss_blur_order": [
+    2,
+    true
+  ],
+  "sharpen_order": [
+    3,
+    false
+  ],
+  "median_order": [
+    4,
+    false
+  ],
+  "edge_order": [
+    5,
+    false
+  ],
+  "threshold_order": [
+    6,
+    true
+  ],
+  "open_order": [
+    7,
+    false
+  ],
+  "close_order": [
+    8,
+    false
+  ],
+  "gradient_order": [
+    9,
+    false
+  ],
+  "i_gradient_order": [
+    10,
+    false
+  ],
+  "e_gradient_order": [
+    11,
+    false
+  ],
+  "minima": 30,
+  "maxima": 60,
+  "threshold_inversion": false,
+  "algorithm": "Euclidean",
+  "square": false,
+  "power": 3,
+  "cluster_size": 15,
+  "size_match": "NO_LOWER",
+  "epsilon": 4.2,
+  "minimum_samples": 50,
+  "match": 0.6,
+  "overlap": 0.1,
+  "overlap_directions": [
+    true,
+    true,
+    false
+  ],
+  "scan_size": 256,
+  "exposure_time": 1e-3,
+  "bit_depth": 6,
+  "save_path": "X:/data/2024/{session}/Merlin/{sample}",
+  "checkpoints": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "scan_mode": true,
+  "session": "''",
+  "sample": "''",
+  "corrections_enabled": [
+    true,
+    true,
+    true
+  ],
+  "scan_resolution": 16384,
+  "selected": "raster",
+  "raster": {
+    "skip": 0,
+    "start": "TOP_LEFT",
+    "orientation": "along x",
+    "coverage": 1
+  },
+  "snake": {
+    "skip": 0,
+    "start": "TOP_LEFT",
+    "orientation": "along x",
+    "coverage": 1
+  },
+  "spiral": {
+    "skip": 0,
+    "start": "TOP_LEFT",
+    "orientation": "outside-in",
+    "coverage": 1
+  },
+  "grid": {
+    "gap": 1,
+    "shift": 0,
+    "order": "row-major (++)",
+    "coverage": 1
+  },
+  "random": {
+    "r_type": "UNIFORM",
+    "n": 20,
+    "coverage": 1,
+    "scale": 1,
+    "loc": 0,
+    "lam": 0,
+    "low": 0,
+    "high": 256
+  },
+  "drift_scans": 5,
+  "windowing": [
+    false,
+    false,
+    false
+  ],
+  "window_order": [
+    "HANNING",
+    "SOBEL",
+    "MEDIAN"
+  ],
+  "drift_resolution": 4096,
+  "min_emission": 3.5,
+  "focus_scans": 10,
+  "focus_change": "0010",
+  "change_decay": 0.2,
+  "focus_tolerance": "0001",
+  "focus_limit": "0083"
+}

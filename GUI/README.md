@@ -1,10 +1,10 @@
 # Graphical User Interface for automating data collection
 
-The GUI is a command-line executable python script. 
-From the command line the following settings can be configured:
-  * Initial (survey) image size from 128x128 up to 4096x4096.
-  * Grid square colour for viewing the overlap on selected clusters.
-  * Marker colour for viewing current scan position.
+The GUI is executable python script, with an attached configuration file.
+
+All help is available in the GUI by using the 'Help' button. Furthermore, certain tabs will produce a tooltip when hovered over. This tooltip is a useful help text summary.
 
 It consists of several 'pages' where each page performs a certain function.
 This allows each page to have settings relevant to it, to make it easier for users to see what settings they need to change for a specific progress.
+
+The GUI documentation is available on Confluence at: https://confluence.diamond.ac.uk/display/EPSIC/Automated+data+collection+using+Max+GUI
