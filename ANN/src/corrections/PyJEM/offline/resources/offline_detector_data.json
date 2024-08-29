@@ -1,0 +1,93 @@
+﻿{
+  "capture": {
+    "jpg": "D:\\PyJEM\\trunk\\Src\\source\\PyJEM\\offline\\snapshot.jpg",
+    "tif": "D:\\PyJEM\\trunk\\Src\\source\\PyJEM\\offline\\snapshot.tif",
+    "bmp": "D:\\PyJEM\\trunk\\Src\\source\\PyJEM\\offline\\snapshot.bmp"
+  },
+  "status": {
+    "status": "OK"
+  },
+  "insert": {
+    "status": false
+  },
+  "detectors": [
+    "STEM BF",
+    "STEM DF",
+    "camera",
+    "ADF1"
+  ],
+  "assign": {
+    "camera": "4",
+    "STEM BF": "1",
+    "STEM DF": "2",
+    "ADF1": "3"
+  },
+  "settings": {
+    "frameIntegrationMinimum": 65535,
+    "ExposureTimeString": 1,
+    "CanGain": true,
+    "SyncMode": 1,
+    "AreaModeImagingArea": {
+      "Top": 0,
+      "Left": 0,
+      "Width": 512,
+      "Height": 512
+    },
+    "spotPositionMaximum": 511,
+    "GainIndexMinimum": 4095,
+    "BinningIndex": 0,
+    "frameIntegration": 1,
+    "ImagingAreaMinimum": 4096,
+    "OffsetIndex": 1,
+    "Version": "1.0",
+    "OffsetIndexMaximum": 4095,
+    "DigitalRotation": 0.0,
+    "ScanRotation": 0.0,
+    "scanMode": 1,
+    "SpotPosition": {
+      "Y": 255,
+      "X": 255
+    },
+    "horizontalLineNoMaximum": 511,
+    "FrameRate": 10,
+    "spotPositionMinimum": 511,
+    "ImagingArea": {
+      "Y": 0,
+      "Width": 512,
+      "X": 0,
+      "Height": 512
+    },
+    "ExposureTimeIndexMinimum": 65535,
+    "ExposureTimeValue": 1,
+    "CanOffset": true,
+    "GainIndexMaximum": 4095,
+    "MultiDetectorMode": 1,
+    "CanBinning": true,
+    "AreaModeImagingAreaMaximum": 511,
+    "ImagingAreaMaximum": 4096,
+    "ExposureTimeIndex": 1,
+    "scanRotationMaximum": 359.9,
+    "OutputImageInformation": {
+      "EffectBits": 16,
+      "DataBits": 16,
+      "ImageSize": {
+        "Width": 512,
+        "Height": 512
+      },
+      "PixelsPerMeter": {
+        "Vertical": 2560,
+        "Horizontal": 2560
+      }
+    },
+    "ExposureTimeIndexMaximum": 65535,
+    "OffsetIndexMinimum": 4095,
+    "scanRotationMinimum": 0.0,
+    "HorizontalLineNo": 1,
+    "scanRotationStep": 0.1,
+    "ExposureTime": 1,
+    "horizontalLineNoMinimum": 511,
+    "frameIntegrationMaximum": 65535,
+    "GainIndex": 1,
+    "AreaModeImagingAreaMinimum": 511
+  }
+}
