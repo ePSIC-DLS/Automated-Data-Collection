@@ -16,6 +16,7 @@ from ... import utils
 from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widgets
 from ..._errors import *
 from .... import load_settings, microscope, validation
+from ..corrections import _drift
 
 import logging
 
@@ -327,6 +328,52 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._scanner = scanner
 
         self._resolution = default_settings["scan_resolution"]
+        
+        #### Adding code for drift correction- MD #####
+       
+        self.drift_correction = _drift.TranslateRegion(failure_action,
+                                                       mic=self._mic, 
+                                                       scanner=self._scanner, 
+                                                       scan_func=lambda scan_type, bool_: self._scan(scan_type, bool_),  # Corrected scan_func, 
+                                                       survey_size=(512,512))  # Correct survey_size)
+                                                       # image.original.size())
+        self._drift_ref = self.drift_correction.set_ref( tl=(5,5), br=(20,20))
+        self.drift_correction.conditionHit.connect(self.perform_drift_correction)
+        self.x_shift = 0
+        self.y_shift = 0
+    
+    def _scan(self, scan_type, bool_) :
+        return self._scanner.scan()
+    
+    def perform_drift_correction(self):
+        print("********DRIFT CORR TRIGGERED******")
+        # PAUSE before correction
+        self._state = utils.StoppableStatus.PAUSED
+        # self._run.pause.emit()
+        self._run_drift_correction()
+        self.update_grids(self.x_shift, self.y_shift)
+        self._image.run()
+        self._draw_images()
+        #RESUME after correction
+        self._state = utils.StoppableStatus.ACTIVE
+    
+    def _run_drift_correction(self):
+    #  set reference image here
+        # tl = (0, 0)  #  Top-left corner of the region
+        # br = self._image.original.size # Bottom-right corner of the region
+        # self.drift_correction.set_ref(tl, br)
+        print("*****Line_364****")
+        self.drift_correction.run()
+        self.drift_correction.drift.connect(self.update_drift_values)
+        # self.drift_correction.run()
+        # self.drift_correction.drift.connect(self.update_drift_values)
+
+    def update_drift_values(self, x, y):
+        self.x_shift, self.y_shift = x, y        
+        
+        #### Adding code for drift correction- MD - end
+        
+        
 
     def _img(self, img: images.RGBImage) -> np.ndarray:
         w, h = self._canvas.image_size
@@ -445,8 +492,16 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Survey Scan", data=self._survey())
 
         def _merlin_scan():
-            merlin_cmd.setValue('FILENAME', f"{stamp}_data")
+            time.sleep(1)
+            try:
+                print("******First Try******")
+                # merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
+                merlin_cmd.setValue('FILENAME', f"{stamp}_data")
+            except IndexError:
+                print("*****TRY AGAIN!**")
+                merlin_cmd.setValue('FILENAME', f"{stamp}_data")
             merlin_cmd.setValue('TRIGGERSTART', 1)
+            time.sleep(1)
             merlin_cmd.setValue('TRIGGERSTOP', 1)
             time.sleep(1)
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
@@ -454,9 +509,10 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 time.sleep(1)
                 print('6')
                 self._scanner.scan(return_=False)
-                time.sleep(0.001)
-                merlin_cmd.setValue('TRIGGERSTART', 0)
-                merlin_cmd.setValue('TRIGGERSTOP', 0)
+                time.sleep(1)
+                print("********SET TRIGGER TO 0*******")
+                merlin_cmd.setValue('TRIGGERSTART', 0) # changed from 0 - MD 
+                merlin_cmd.setValue('TRIGGERSTOP', 0) #  changed from 0 - MD 
                 time.sleep(1)
 
         if current is None:
@@ -483,6 +539,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd = microscope.merlin_connection.MERLIN_connection(hostname)
             print('Setup')
             # <editor-fold desc="Merlin config">
+            print("******Detector STATUS******")
+            merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
+            
             merlin_cmd.setValue('NUMFRAMESTOACQUIRE', pixels)
             merlin_cmd.setValue('COUNTERDEPTH', bit_depth)
             merlin_cmd.setValue('CONTINUOUSRW', 1)
@@ -500,22 +559,27 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('SCANDETECTOR1ENABLE', 1)
             # Standard ADF det
             merlin_cmd.setValue('SCANDETECTOR1TYPE', 0)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 255)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 255)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 128)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 128)
             merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 50)
             merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 150)
             # </editor-fold>
 
         original = self._original_image.data()
+        print(f"*********regions num {len(self._regions)}************")
         for i, region in enumerate(self._regions):
+            print(f"*********region {i}************")
             original = self._original_image.data()
             self._i = i + 1
             if i < current:
+                print("#######L518######")
                 continue
             elif self._state == utils.StoppableStatus.PAUSED:
+                print("#######L521######")
                 self._run.pause.emit(i)
                 return
             elif self._state == utils.StoppableStatus.DEAD:
+                print("#######L525######")
                 with self._canvas as draw:
                     draw.data.reference()[:, :] = original.copy()
                 return
@@ -537,6 +601,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val), top_left_4k)
                     with self._scanner.switch_scan_area(scan_area):
+                        print(f"******scan area: {scan_area.rect}******")
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
                             print(f"Made dir: {save_path}")
@@ -546,9 +611,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         params = f"{save_path}\\{stamp}.hdf5"
                         if not do_merlin:
+                            print("************4********")
                             _reg_scan()
                         else:
                             print(params)
+                            print("************3********")
                         _file_write()
                         if do_merlin:
                             with h5py.File(params, "a") as co_ords:
@@ -561,8 +628,17 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                             with self._scanner.using_connection(6, microscope.TTLMode.SOURCE_TIMED,
                                                                 microscope.PixelClock(microscope.EdgeType.RISING),
                                                                 active=1e-5):
+                                print("************2********")
                                 _merlin_scan()
+                            self.drift_correction.scans_increased()
+                            print("******SCAN INCREASED*****")
+                            # Here we need to check if the criteria for drift corr is met
+                            # Do we need to pause?
+                            self.drift_correction.query()
+                            print(self.drift_correction.query())
+                            
             if self._progress.isEnabled():
+                print("************1********")
                 self.scanPerformed.emit()
                 self._clusterScanned.emit(i + 1)
 

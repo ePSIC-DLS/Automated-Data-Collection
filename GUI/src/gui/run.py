@@ -291,7 +291,7 @@ class GUI(widgets.QMainWindow):
         drift.runStart.connect(lambda: self._pause(-1))
         focus.runEnd.connect(lambda: self._resume(-1))
         drift.runEnd.connect(lambda: self._resume(-1))
-
+        print("0 - DRIFT CORR RUNNING")
         stage_5.runStart.connect(drift.run)
 
         stage_1.clusterFound.connect(lambda _: stage_4.clear())

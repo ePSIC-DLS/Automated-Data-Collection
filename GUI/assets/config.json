@@ -7,7 +7,7 @@
   "init_dwell": 15e-6,
   "finished_colour": "#FFFF00",
   "engine_type": "QD",
-  "microscope": false,
+  "microscope": true,
   "num_groups": 17,
   "blur_call": [
     5,
@@ -109,27 +109,27 @@
     11,
     false
   ],
-  "minima": 30,
-  "maxima": 60,
-  "threshold_inversion": false,
+  "minima": 50,
+  "maxima": 150,
+  "threshold_inversion": true,
   "algorithm": "Euclidean",
   "square": false,
   "power": 3,
-  "cluster_size": 15,
+  "cluster_size": 5,
   "size_match": "NO_LOWER",
   "epsilon": 4.2,
   "minimum_samples": 50,
-  "match": 0.6,
+  "match": 0.01,
   "overlap": 0.1,
   "overlap_directions": [
-    true,
-    true,
+    false,
+    false,
     false
   ],
-  "scan_size": 256,
+  "scan_size": 128,
   "exposure_time": 1e-3,
   "bit_depth": 6,
-  "save_path": "X:/data/2024/{session}/Merlin/{sample}",
+  "save_path": "X:/data/2025/{session}/Merlin/{sample}",
   "checkpoints": [
     true,
     true,
@@ -137,14 +137,14 @@
     true
   ],
   "scan_mode": true,
-  "session": "''",
-  "sample": "''",
+  "session": "'cm40603-3'",
+  "sample": "'test'",
   "corrections_enabled": [
     true,
-    true,
-    true
+    false,
+    false
   ],
-  "scan_resolution": 16384,
+  "scan_resolution": 2048,
   "selected": "raster",
   "raster": {
     "skip": 0,
@@ -180,7 +180,7 @@
     "low": 0,
     "high": 256
   },
-  "drift_scans": 5,
+  "drift_scans": 1,
   "windowing": [
     false,
     false,
@@ -193,7 +193,7 @@
   ],
   "drift_resolution": 4096,
   "min_emission": 3.5,
-  "focus_scans": 10,
+  "focus_scans": 30,
   "focus_change": "0010",
   "change_decay": 0.2,
   "focus_tolerance": "0001",

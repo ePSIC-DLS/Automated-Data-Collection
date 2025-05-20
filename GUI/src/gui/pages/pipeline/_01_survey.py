@@ -59,7 +59,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._polygon_mode = utils.LabelledWidget("ROI Drawing Mode", widgets.QCheckBox("&R"), utils.LabelOrder.SUFFIX)
         self._polygon_mode.focus.stateChanged.connect(_reset)
 
-        self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(16, 32, 64),
+        self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(16, 32, 64, 128),
                                                 utils.LabelOrder.SUFFIX)
         self._export = widgets.QPushButton("Export region")
         self._co_ords = (0, 0, 0, 0)

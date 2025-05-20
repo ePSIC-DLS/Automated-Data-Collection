@@ -1,4 +1,5 @@
 import typing
+import time
 from typing import Optional as _None, Tuple as _tuple
 
 import numpy as np
@@ -16,7 +17,7 @@ default_settings = load_settings("assets/config.json",
                                  window_order=validation.examples.window_order,
                                  drift_resolution=validation.examples.resolution,
                                  )
-
+ 
 
 class TranslateRegion(ShortCorrectionPage):
     """
@@ -140,9 +141,12 @@ class TranslateRegion(ShortCorrectionPage):
         """
         self._region = utils.ScanRegion(tl, br[0] - tl[0], self._size)
         self._ref = self._do_scan(0, 0)
+        print(f"*****Size of the drift corr area: {self._ref.size}*****")
         self._amount.set_current(0)
         self._outputs[0, 0].draw(self._ref, resize=True)
         self._display_popup(self._outputs)
+        return self._ref
+        
 
     def query(self):
         self._amount.check()
@@ -152,6 +156,8 @@ class TranslateRegion(ShortCorrectionPage):
             res = self._drift_resolution.focus.get_data()
             new_reg = self._region @ res
             top_left = new_reg[images.AABBCorner.TOP_LEFT]
+            print(f"****Scan_res: {res}")
+            
             area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
             return self._scan(area, True).norm().dynamic().promote()
         else:
@@ -176,23 +182,65 @@ class TranslateRegion(ShortCorrectionPage):
             raise StagingError("drift correction", "exporting drift region")
         self.runStart.emit()
         x_shift, y_shift = map(int, self._shift.get_data())
-        new = self._do_scan(x_shift, y_shift)
+        print(f'x_shift, y_shift :  {x_shift, y_shift}' )
+        time.sleep(3)
+        new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
+        print('scan complete')
 
         ref_mask = self._window(self._ref.convert(np.float64))
         new_mask = self._window(new.convert(np.float64))
-        corr, error, _ = convolve(ref_mask, new_mask)
+        
+        print('window update')
+
+        '''make the data from the ADF detector postive'''
+        ref_mask2 = ref_mask - np.amin(ref_mask)
+        new_mask2 = new_mask - np.amin(new_mask)
+        
+        ref_mean = np.mean(ref_mask2)
+        new_mean = np.mean(new_mask2)
+        
+        '''correct the scan artifact at the start of the scan as this prevents the correct cross correlation
+        of the two images'''
+        # ref_mask2[:, :2] = ref_median 
+        # new_mask2[:, :2] = new_median
+        
+        pad = 256
+        ref_pad = np.pad(ref_mask2,pad,constant_values=ref_mean,mode='constant')
+        new_pad = np.pad(new_mask2,pad,constant_values=new_mean,mode='constant')
+        #ref_pad = np.zeros((ref_mask.shape[0]+pad*2, ref_mask.shape[1]+pad*2))
+        #new_pad = np.zeros((new_mask.shape[0]+pad*2, new_mask.shape[1]+pad*2))
+        # ref_pad[pad:-pad, pad:-pad] = ref_mask
+        # new_pad[pad:-pad, pad:-pad] = new_mask
+        print(f"******ref and new images padded: {ref_pad.size, new_pad.size}")
+        
+        corr, error, _ = convolve(ref_pad, new_pad) #convolve(ref_mask, new_mask)
         shift = -corr
+        print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
         self._outputs[0, 1].draw(new, resize=True)
-        shifted_ref = np.real(np.fft.ifft(imgs.fourier_shift(np.fft.fftn(ref_mask), shift))).astype(np.int_)
+        print(type(self._outputs[0, 1]))
+        shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) # modified by JR (10.04.2025)
         correction = shift.astype(np.int_)
-        mask = images.RGBImage(np.where(shifted_ref == new_mask, 255, 0))
+        
+        #making a image to dispaly the overlap between the two images
+        shifted_mask = np.where(new_pad>0,255,0)
+        unshifted_mask = np.where(ref_pad>0,255,0)
+        overlap_mask = shifted_mask + unshifted_mask
+        overlap = (new_pad + unshifted_mask)/(overlap_mask+0.001)
+        overlap = 255*overlap/np.amax(overlap)
+        overlap = np.sum(np.reshape(overlap,(int(overlap.shape[0]/2),2,int(overlap.shape[0]/2),2)),axis=(1,3))
+        overlap = overlap.astype(np.int_)
+        
+        mask = shifted_ref - new_mask
+        mask = images.RGBImage(mask.astype(np.int_))#images.RGBImage(np.where(shifted_ref == new_mask, 255, 0))
         self._outputs[1, 0].draw(images.RGBImage(shifted_ref).norm(), resize=True)
-        self._outputs[1, 1].draw(mask.downchannel(0, mask.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(),
-                                 resize=True)
+        self._outputs[1, 1].draw(images.RGBImage(overlap).norm(), resize=True)
+        #self._outputs[1, 1].draw(images.GreyImage.blank(overlap).norm(), resize=True)
+        #self._outputs[1, 1].draw(overlap.downchannel(0, overlap.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(), resize=True)
+        # self._outputs[1, 1].draw( ,resize=True)  
+        
         self.drift.emit(correction[1], correction[0])
         if microscope.ONLINE:
-            self._ref = new
-            self._outputs[0, 0].draw(self._ref)
+            self._ref = new #update _ref image with new drift image
         self._display_popup(self._outputs)
         self.runEnd.emit()
 
@@ -217,7 +265,6 @@ class TranslateRegion(ShortCorrectionPage):
             window_map["Sobel"] = _sobel
         if window_value & utils.Windowing.MEDIAN:
             window_map["Median"] = _median
-
         for window_type in map(lambda t: t.text(), self._order.focus.get_members()):
             image = window_map.get(window_type, lambda i: i)(image)
         return image - image.mean()
