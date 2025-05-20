@@ -109,6 +109,7 @@ class TranslateRegion(ShortCorrectionPage):
         self._regular.addWidget(self._windowing)
         self._regular.addWidget(self._order)
 
+        self._calculated_shift = (0,0)
         self._shift = utils.SizeControl(0, 1, validation.examples.any_int)
         if not microscope.ONLINE:
             self._layout.addWidget(self._shift, 0, 2)
@@ -149,7 +150,8 @@ class TranslateRegion(ShortCorrectionPage):
         
 
     def query(self):
-        self._amount.check()
+        return self._amount.check()
+        
 
     def _do_scan(self, x_shift: int, y_shift: int) -> images.RGBImage:
         if microscope.ONLINE:
@@ -185,7 +187,9 @@ class TranslateRegion(ShortCorrectionPage):
         print(f'x_shift, y_shift :  {x_shift, y_shift}' )
         time.sleep(3)
         new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
-        print('scan complete')
+        print('scan complete1')
+        new = self._do_scan(x_shift, y_shift)
+        print('scan complete2')
 
         ref_mask = self._window(self._ref.convert(np.float64))
         new_mask = self._window(new.convert(np.float64))
@@ -216,6 +220,11 @@ class TranslateRegion(ShortCorrectionPage):
         corr, error, _ = convolve(ref_pad, new_pad) #convolve(ref_mask, new_mask)
         shift = -corr
         print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
+        self._calculated_shift = tuple(shift)
+        print(f"##### updated shift: {self._calculated_shift} ######")
+
+        # pre-initialised _calculated_shift in _init
+        # self._shift.change_data(shift)
         self._outputs[0, 1].draw(new, resize=True)
         print(type(self._outputs[0, 1]))
         shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) # modified by JR (10.04.2025)
@@ -240,7 +249,7 @@ class TranslateRegion(ShortCorrectionPage):
         
         self.drift.emit(correction[1], correction[0])
         if microscope.ONLINE:
-            self._ref = new #update _ref image with new drift image
+            self._ref = new # update _ref image with new drift image
         self._display_popup(self._outputs)
         self.runEnd.emit()
 

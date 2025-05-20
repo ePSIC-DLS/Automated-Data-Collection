@@ -330,43 +330,37 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._resolution = default_settings["scan_resolution"]
         
         #### Adding code for drift correction- MD #####
-       
+        def _scan_region(area,return_):
+            with self._scanner.switch_scan_area(area):
+                return self._scanner.scan(return_ = return_)
         self.drift_correction = _drift.TranslateRegion(failure_action,
-                                                       mic=self._mic, 
-                                                       scanner=self._scanner, 
-                                                       scan_func=lambda scan_type, bool_: self._scan(scan_type, bool_),  # Corrected scan_func, 
-                                                       survey_size=(512,512))  # Correct survey_size)
-                                                       # image.original.size())
-        self._drift_ref = self.drift_correction.set_ref( tl=(5,5), br=(20,20))
-        self.drift_correction.conditionHit.connect(self.perform_drift_correction)
-        self.x_shift = 0
-        self.y_shift = 0
+                                                        mic=self._mic, 
+                                                        scanner=self._scanner, 
+                                                        scan_func=_scan_region,
+                                                        survey_size=(512,512))  # Correct survey_size)
+
     
     def _scan(self, scan_type, bool_) :
         return self._scanner.scan()
     
-    def perform_drift_correction(self):
-        print("********DRIFT CORR TRIGGERED******")
-        # PAUSE before correction
-        self._state = utils.StoppableStatus.PAUSED
-        # self._run.pause.emit()
-        self._run_drift_correction()
-        self.update_grids(self.x_shift, self.y_shift)
-        self._image.run()
-        self._draw_images()
-        #RESUME after correction
-        self._state = utils.StoppableStatus.ACTIVE
+    # def perform_drift_correction(self):
+    #     print("********DRIFT CORR TRIGGERED******")
+    #     # PAUSE before correction
+    #     self._state = utils.StoppableStatus.PAUSED
+    #     # self._run.pause.emit()
+    #     self._run_drift_correction()
+    #     self.update_grids(self.x_shift, self.y_shift)
+    #     self._image.run()
+    #     self._draw_images()
+    #     #RESUME after correction
+    #     self._state = utils.StoppableStatus.ACTIVE
     
     def _run_drift_correction(self):
-    #  set reference image here
-        # tl = (0, 0)  #  Top-left corner of the region
-        # br = self._image.original.size # Bottom-right corner of the region
-        # self.drift_correction.set_ref(tl, br)
-        print("*****Line_364****")
+
+        print("*****Line_361****")
         self.drift_correction.run()
         self.drift_correction.drift.connect(self.update_drift_values)
-        # self.drift_correction.run()
-        # self.drift_correction.drift.connect(self.update_drift_values)
+
 
     def update_drift_values(self, x, y):
         self.x_shift, self.y_shift = x, y        
@@ -632,10 +626,17 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                                 _merlin_scan()
                             self.drift_correction.scans_increased()
                             print("******SCAN INCREASED*****")
+                            print(f"Check for drift correction :{self.drift_correction.query()}")
+                            x_shift, y_shift = self.drift_correction._calculated_shift
+                            print(f'x_shift, y_shift :  {x_shift, y_shift}' )
+                            self.update_grids(x_shift, y_shift)
+ 
                             # Here we need to check if the criteria for drift corr is met
                             # Do we need to pause?
-                            self.drift_correction.query()
-                            print(self.drift_correction.query())
+                            # if self.drift_correction.query():
+                            #     self.update_grids(self.drift_correction._calculated_shift[0],
+                            #                       self.drift_correction._calculated_shift[1])
+                            
                             
             if self._progress.isEnabled():
                 print("************1********")
