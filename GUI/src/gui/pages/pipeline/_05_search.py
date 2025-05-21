@@ -17,6 +17,7 @@ from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widget
 from ..._errors import *
 from .... import load_settings, microscope, validation
 from ..corrections import _drift
+from qtpy.QtCore import Slot
 
 import logging
 
@@ -261,7 +262,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
     def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_, done: np.int_,
                  failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
-                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline):
+                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline,drift_correction):
         DeepSearch.SIZES = tuple(s for s in DeepSearch.SIZES if s < size)
         CanvasPage.__init__(self, size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
@@ -328,20 +329,50 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._scanner = scanner
 
         self._resolution = default_settings["scan_resolution"]
+        #save_path = X:\data\2025\cm40603-3\Merlin\test_1645
+        self.save_path = self.get_setting("save_path").format(session=self._session.focus.text()[1:-1],
+                                                         sample=self._sample.focus.text()[1:-1]).replace("/", "\\")
+        
+        self._logger = logging.Logger("drift_history", level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG,
+                                 filename=f"{self.save_path}\\drift_history.log", filemode="a", force=True)
         
         #### Adding code for drift correction- MD #####
-        def _scan_region(area,return_):
-            with self._scanner.switch_scan_area(area):
-                return self._scanner.scan(return_ = return_)
-        self.drift_correction = _drift.TranslateRegion(failure_action,
-                                                        mic=self._mic, 
-                                                        scanner=self._scanner, 
-                                                        scan_func=_scan_region,
-                                                        survey_size=(512,512))  # Correct survey_size)
+        
+        # Yiming added:
+        self.drift_correction = drift_correction
+        
+        # Yiming removed these
+        ############
+        # def _scan_region(area,return_):
+        #     with self._scanner.switch_scan_area(area):
+        #         return self._scanner.scan(return_ = return_)
+        # self.drift_correction = _drift.TranslateRegion(failure_action,
+        #                                                 mic=self._mic, 
+        #                                                 scanner=self._scanner, 
+        #                                                 scan_func=_scan_region,
+        #                                                 survey_size=(512,512))  # Correct survey_size)
+        ############
+        
+        
+        
+        
+        # YX added here #
+        # when the user draws a region on survey image, use it as drift reference
+        image.driftRegion.connect(self.drift_correction.set_ref)
+        # whenever a new drift vector is calculated, shift the grids in DeepSearch class
+        self.drift_correction.drift.connect(self.update_grids)
+        # run TranslateRegion whenever the DeepSearch class is ran
+        self.runStart.connect(self.drift_correction.run)
 
-    
-    def _scan(self, scan_type, bool_) :
-        return self._scanner.scan()
+
+
+
+    #     @Slot(int, int)
+    #     def handle_drift_values(self, dx, dy):
+    #         print(f"********Passed on drift info: {dx, dy}")   
+    # def _scan(self, scan_type, bool_) :
+    #     return self._scanner.scan()
     
     # def perform_drift_correction(self):
     #     print("********DRIFT CORR TRIGGERED******")
@@ -355,15 +386,15 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     #     #RESUME after correction
     #     self._state = utils.StoppableStatus.ACTIVE
     
-    def _run_drift_correction(self):
+    # def _run_drift_correction(self):
 
-        print("*****Line_361****")
-        self.drift_correction.run()
-        self.drift_correction.drift.connect(self.update_drift_values)
+    #     print("*****Line_361****")
+    #     self.drift_correction.run()
+    #     self.drift_correction.drift.connect(self.update_drift_values)
 
 
-    def update_drift_values(self, x, y):
-        self.x_shift, self.y_shift = x, y        
+    # def update_drift_values(self, x, y):
+    #     self.x_shift, self.y_shift = x, y        
         
         #### Adding code for drift correction- MD - end
         
@@ -423,10 +454,14 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             The number of pixels to vertically shift the scan regions.
         """
         msg = f"Shifting all squares by {x_shift, y_shift}"
+        print(msg)
         if self._logger is None:
-            print(msg)
+            print("\n")
+            # print(msg)
         else:
-            self._logger.debug(msg)
+
+            print(self._logger)
+            self._logger.log(msg)
         lim = self._canvas.image_size[0]
         for grid in self._regions:
             grid.move((x_shift, y_shift))
@@ -464,7 +499,6 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     @utils.Stoppable.decorate(manager=ProcessPage.MANAGER)
     @utils.Tracked
     def _run(self, current: typing.Optional[int]):
-
         def _reg_scan():
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 with self._mic.subsystems["Detectors"].switch_inserted(True):
@@ -599,7 +633,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
                             print(f"Made dir: {save_path}")
-                        self._logger = logging.Logger("drift", level=logging.DEBUG)
+                        self._logger = <.Logger("drift", level=logging.DEBUG)
                         logging.basicConfig(level=logging.DEBUG,
                                             filename=f"{save_path}\\drift.log", filemode="a", force=True)
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -624,12 +658,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                                                                 active=1e-5):
                                 print("************2********")
                                 _merlin_scan()
-                            self.drift_correction.scans_increased()
-                            print("******SCAN INCREASED*****")
-                            print(f"Check for drift correction :{self.drift_correction.query()}")
-                            x_shift, y_shift = self.drift_correction._calculated_shift
-                            print(f'x_shift, y_shift :  {x_shift, y_shift}' )
-                            self.update_grids(x_shift, y_shift)
+                            # print("******SCAN INCREASED*****")
+                            # print(f"Check for drift correction :{self.drift_correction.query()}")
+                            # x_shift, y_shift = self.drift_correction._calculated_shift
+                            # print(f'x_shift, y_shift :  {x_shift, y_shift}' )
+                            # self.update_grids(x_shift, y_shift) # delete this?
  
                             # Here we need to check if the criteria for drift corr is met
                             # Do we need to pause?

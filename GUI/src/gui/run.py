@@ -183,9 +183,7 @@ class GUI(widgets.QMainWindow):
         stage_2 = pages.pipeline.ProcessingPipeline(size, stage_1, _data_failed)
         stage_3 = pages.pipeline.Clusters(size, cluster_colour, initial_pitch, stage_2, _data_failed)
         stage_4 = pages.pipeline.Management(size, stage_1, stage_3, _data_failed)
-        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, marker_colour, finished_colour, _data_failed,
-                                            self._microscope, self._scanner, stage_3, stage_2)
-
+        
         stage_h = pages.additionals.Histogram(size, stage_1, histogram_outline, _data_failed)
         stage_p = pages.additionals.ScanType(size, pattern_colour, _data_failed)
         stage_c = pages.additionals.Manager(_data_failed, self._microscope, self._scanner, (size, size), stage_m.scan)
@@ -194,6 +192,10 @@ class GUI(widgets.QMainWindow):
         focus = corrections["focus"]
         emission = corrections["emission"]
         drift = corrections["drift"]
+        # YX: moving stage_5 here so the drift_correction can be added in initialisation
+        stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, marker_colour, finished_colour, _data_failed,
+                                            self._microscope, self._scanner, stage_3, stage_2, drift_correction=drift)
+
 
         stage_a = pages.additionals.Scripts(
             _compile,
@@ -283,7 +285,6 @@ class GUI(widgets.QMainWindow):
         stage_p.settingChanged.connect(_update_pitches)
 
         stage_1.driftRegion.connect(drift.set_ref)
-        drift.drift.connect(stage_5.update_grids)
         stage_5.scanPerformed.connect(focus.scans_increased)
         stage_5.scanPerformed.connect(drift.scans_increased)
 
@@ -293,7 +294,10 @@ class GUI(widgets.QMainWindow):
         drift.runEnd.connect(lambda: self._resume(-1))
         print("0 - DRIFT CORR RUNNING")
         stage_5.runStart.connect(drift.run)
-
+        # drift.drift.connect(stage_5.update_grids) # Yiming commented this out
+        
+        del drift # Yiming added
+        
         stage_1.clusterFound.connect(lambda _: stage_4.clear())
 
         self._master.addTab(CombinedPage(image=stage_1, histogram=stage_h), "Survey (&1)")
@@ -312,7 +316,7 @@ class GUI(widgets.QMainWindow):
         self._master.setTabToolTip(6, _help(stage_a.help()))
         stage_c.add_tooltip(0, _help(focus.help()))
         stage_c.add_tooltip(1, _help(emission.help()))
-        stage_c.add_tooltip(2, _help(drift.help()))
+        # stage_c.add_tooltip(2, _help(drift.help()))
 
         scan = widgets.QPushButton("Scan (&A)")
         process = widgets.QPushButton("Threshold (&B)")
