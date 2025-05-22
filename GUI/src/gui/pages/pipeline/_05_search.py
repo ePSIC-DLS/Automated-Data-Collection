@@ -16,8 +16,8 @@ from ... import utils
 from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widgets
 from ..._errors import *
 from .... import load_settings, microscope, validation
-from ..corrections import _drift
-from qtpy.QtCore import Slot
+# from ..corrections import _drift
+# from qtpy.QtCore import Slot
 
 import logging
 
@@ -330,31 +330,12 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
         self._resolution = default_settings["scan_resolution"]
         #save_path = X:\data\2025\cm40603-3\Merlin\test_1645
-        self.save_path = self.get_setting("save_path").format(session=self._session.focus.text()[1:-1],
-                                                         sample=self._sample.focus.text()[1:-1]).replace("/", "\\")
-        
-        self._logger = logging.Logger("drift_history", level=logging.DEBUG)
-        logging.basicConfig(level=logging.DEBUG,
-                                 filename=f"{self.save_path}\\drift_history.log", filemode="a", force=True)
+       
         
         #### Adding code for drift correction- MD #####
         
         # Yiming added:
         self.drift_correction = drift_correction
-        
-        # Yiming removed these
-        ############
-        # def _scan_region(area,return_):
-        #     with self._scanner.switch_scan_area(area):
-        #         return self._scanner.scan(return_ = return_)
-        # self.drift_correction = _drift.TranslateRegion(failure_action,
-        #                                                 mic=self._mic, 
-        #                                                 scanner=self._scanner, 
-        #                                                 scan_func=_scan_region,
-        #                                                 survey_size=(512,512))  # Correct survey_size)
-        ############
-        
-        
         
         
         # YX added here #
@@ -362,42 +343,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         image.driftRegion.connect(self.drift_correction.set_ref)
         # whenever a new drift vector is calculated, shift the grids in DeepSearch class
         self.drift_correction.drift.connect(self.update_grids)
-        # run TranslateRegion whenever the DeepSearch class is ran
-        self.runStart.connect(self.drift_correction.run)
-
-
-
-
-    #     @Slot(int, int)
-    #     def handle_drift_values(self, dx, dy):
-    #         print(f"********Passed on drift info: {dx, dy}")   
-    # def _scan(self, scan_type, bool_) :
-    #     return self._scanner.scan()
-    
-    # def perform_drift_correction(self):
-    #     print("********DRIFT CORR TRIGGERED******")
-    #     # PAUSE before correction
-    #     self._state = utils.StoppableStatus.PAUSED
-    #     # self._run.pause.emit()
-    #     self._run_drift_correction()
-    #     self.update_grids(self.x_shift, self.y_shift)
-    #     self._image.run()
-    #     self._draw_images()
-    #     #RESUME after correction
-    #     self._state = utils.StoppableStatus.ACTIVE
-    
-    # def _run_drift_correction(self):
-
-    #     print("*****Line_361****")
-    #     self.drift_correction.run()
-    #     self.drift_correction.drift.connect(self.update_drift_values)
-
-
-    # def update_drift_values(self, x, y):
-    #     self.x_shift, self.y_shift = x, y        
-        
-        #### Adding code for drift correction- MD - end
-        
+        time.sleep(3)
         
 
     def _img(self, img: images.RGBImage) -> np.ndarray:
@@ -455,13 +401,15 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         """
         msg = f"Shifting all squares by {x_shift, y_shift}"
         print(msg)
-        if self._logger is None:
-            print("\n")
-            # print(msg)
+        
+        # Logging drift parameters
+        if self._logger:
+            self._logger.debug(msg)
         else:
-
-            print(self._logger)
-            self._logger.log(msg)
+            # shouldn't happen now, but fallback to root‐logger
+            logging.debug(msg)
+            
+            
         lim = self._canvas.image_size[0]
         for grid in self._regions:
             grid.move((x_shift, y_shift))
@@ -483,6 +431,30 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     def run(self):
         if self._state != utils.StoppableStatus.ACTIVE:
             return
+        
+        # Edit by YX: creating logger file
+        save_path = self.get_setting("save_path").format(session=self._session.focus.text()[1:-1],
+                                                         sample=self._sample.focus.text()[1:-1]).replace("/", "\\")
+        self.save_path = save_path
+        
+        log_file = os.path.join(self.save_path,"drift_records.log")
+        os.makedirs(save_path, exist_ok = True)
+        
+        # one‐time logger config
+        if self._logger is None:
+            self._logger = logging.getLogger("drift")
+            self._logger.setLevel(logging.DEBUG)
+            # avoid duplicate handlers
+            if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.abspath(log_file)
+                       for h in self._logger.handlers):
+                fh = logging.FileHandler(log_file, mode="a")
+                fh.setLevel(logging.DEBUG)
+                fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                fh.setFormatter(fmt)
+                self._logger.addHandler(fh)
+        
+        
+        
         self._regions = self._grids.get_tight()
         if not self._regions:
             raise StagingError("grid search", "exporting tightened grids")
@@ -600,14 +572,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             original = self._original_image.data()
             self._i = i + 1
             if i < current:
-                print("#######L518######")
                 continue
             elif self._state == utils.StoppableStatus.PAUSED:
-                print("#######L521######")
                 self._run.pause.emit(i)
                 return
             elif self._state == utils.StoppableStatus.DEAD:
-                print("#######L525######")
                 with self._canvas as draw:
                     draw.data.reference()[:, :] = original.copy()
                 return
@@ -633,9 +602,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
                             print(f"Made dir: {save_path}")
-                        self._logger = <.Logger("drift", level=logging.DEBUG)
-                        logging.basicConfig(level=logging.DEBUG,
-                                            filename=f"{save_path}\\drift.log", filemode="a", force=True)
+                        # self._logger = .Logger("drift", level=logging.DEBUG)
+                        # logging.basicConfig(level=logging.DEBUG,
+                        #                     filename=f"{save_path}\\drift.log", filemode="a", force=True)
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         params = f"{save_path}\\{stamp}.hdf5"
                         if not do_merlin:
@@ -658,17 +627,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                                                                 active=1e-5):
                                 print("************2********")
                                 _merlin_scan()
-                            # print("******SCAN INCREASED*****")
-                            # print(f"Check for drift correction :{self.drift_correction.query()}")
-                            # x_shift, y_shift = self.drift_correction._calculated_shift
-                            # print(f'x_shift, y_shift :  {x_shift, y_shift}' )
-                            # self.update_grids(x_shift, y_shift) # delete this?
- 
-                            # Here we need to check if the criteria for drift corr is met
-                            # Do we need to pause?
-                            # if self.drift_correction.query():
-                            #     self.update_grids(self.drift_correction._calculated_shift[0],
-                            #                       self.drift_correction._calculated_shift[1])
+
                             
                             
             if self._progress.isEnabled():
