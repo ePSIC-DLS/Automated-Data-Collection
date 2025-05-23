@@ -247,7 +247,7 @@ class TranslateRegion(ShortCorrectionPage):
         #self._outputs[1, 1].draw(overlap.downchannel(0, overlap.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(), resize=True)
         # self._outputs[1, 1].draw( ,resize=True)  
         
-        self.drift.emit(correction[0], correction[1]) # Yiming changed to corrections[0],corrections[1]
+        self.drift.emit(correction[1], correction[0]) # flipping x and y?
         if microscope.ONLINE:
             self._ref = new # update _ref image with new drift image
         self._display_popup(self._outputs)

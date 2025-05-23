@@ -336,14 +336,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         
         # Yiming added:
         self.drift_correction = drift_correction
-        
-        
-        # YX added here #
         # when the user draws a region on survey image, use it as drift reference
         image.driftRegion.connect(self.drift_correction.set_ref)
         # whenever a new drift vector is calculated, shift the grids in DeepSearch class
         self.drift_correction.drift.connect(self.update_grids)
-        time.sleep(3)
+        self.runStart.connect(self.drift_correction.run)
         
 
     def _img(self, img: images.RGBImage) -> np.ndarray:
@@ -492,7 +489,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Survey Scan", data=self._survey())
 
         def _merlin_scan():
-            time.sleep(1)
+            # time.sleep(1) YX commenting this out
             try:
                 print("******First Try******")
                 # merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
@@ -508,7 +505,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
-                self._scanner.scan(return_=False)
+                
+                # YX changeing original self._scanner.scan(return_=False) to:
+                _ = self._scanner.scan()
+                # self._scanner.scan(return_=False)
+                
                 time.sleep(1)
                 print("********SET TRIGGER TO 0*******")
                 merlin_cmd.setValue('TRIGGERSTART', 0) # changed from 0 - MD 
@@ -559,10 +560,10 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('SCANDETECTOR1ENABLE', 1)
             # Standard ADF det
             merlin_cmd.setValue('SCANDETECTOR1TYPE', 0)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 128)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 128)
-            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 50)
-            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 150)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 256)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 256)
+            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 80)
+            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 250)
             # </editor-fold>
 
         original = self._original_image.data()
@@ -588,7 +589,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 region.draw(draw, self._marker)
                 region.draw(self._original_image, self._done)
                 if not microscope.ONLINE:
-                    time.sleep(0.5)
+                    time.sleep(1)
 
             if microscope.ONLINE:
                 with self._mic.subsystems["Detectors"].switch_inserted(False):
@@ -598,6 +599,8 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val), top_left_4k)
                     with self._scanner.switch_scan_area(scan_area):
+                        time.sleep(3) # YX added
+
                         print(f"******scan area: {scan_area.rect}******")
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
@@ -614,13 +617,14 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                             print(params)
                             print("************3********")
                         _file_write()
+                        
                         if do_merlin:
                             with h5py.File(params, "a") as co_ords:
                                 dset = co_ords.create_group("Co-ordinates (cartesian, non-scaled)")
                                 dset.attrs["top left"] = top_left
                                 dset.attrs["bottom right"] = bottom_right
                             merlin_params = {'set_dwell_time(usec)': exposure, 'set_scan_px': px_val,
-                                             'set_bit_depth': bit_depth}
+                                              'set_bit_depth': bit_depth}
                             self._mic.export(params, px_val, **merlin_params)
                             with self._scanner.using_connection(6, microscope.TTLMode.SOURCE_TIMED,
                                                                 microscope.PixelClock(microscope.EdgeType.RISING),
