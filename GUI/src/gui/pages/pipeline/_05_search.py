@@ -489,7 +489,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Survey Scan", data=self._survey())
 
         def _merlin_scan():
-            # time.sleep(1) YX commenting this out
+            # time.sleep(1) # YX commenting this out
             try:
                 print("******First Try******")
                 # merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
@@ -497,23 +497,18 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             except IndexError:
                 print("*****TRY AGAIN!**")
                 merlin_cmd.setValue('FILENAME', f"{stamp}_data")
-            merlin_cmd.setValue('TRIGGERSTART', 1)
-            time.sleep(1)
+            merlin_cmd.setValue('TRIGGERSTART', 1) # YX removing time.sleep(1) in between
             merlin_cmd.setValue('TRIGGERSTOP', 1)
             time.sleep(1)
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
-                
                 # YX changeing original self._scanner.scan(return_=False) to:
                 _ = self._scanner.scan()
-                # self._scanner.scan(return_=False)
-                
-                time.sleep(1)
-                print("********SET TRIGGER TO 0*******")
-                merlin_cmd.setValue('TRIGGERSTART', 0) # changed from 0 - MD 
-                merlin_cmd.setValue('TRIGGERSTOP', 0) #  changed from 0 - MD 
+                time.sleep(0.001) # YX changed from 1 to 0.001
+                merlin_cmd.setValue('TRIGGERSTART', 0)
+                merlin_cmd.setValue('TRIGGERSTOP', 0)
                 time.sleep(1)
 
         if current is None:
@@ -567,9 +562,8 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             # </editor-fold>
 
         original = self._original_image.data()
-        print(f"*********regions num {len(self._regions)}************")
         for i, region in enumerate(self._regions):
-            print(f"*********region {i}************")
+            print(f"*********region {i+1}************")
             original = self._original_image.data()
             self._i = i + 1
             if i < current:
@@ -599,9 +593,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val), top_left_4k)
                     with self._scanner.switch_scan_area(scan_area):
-                        time.sleep(3) # YX added
-
-                        print(f"******scan area: {scan_area.rect}******")
+                        # print(f"******scan area: {scan_area.rect}******")
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
                             print(f"Made dir: {save_path}")
@@ -638,6 +630,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 print("************1********")
                 self.scanPerformed.emit()
                 self._clusterScanned.emit(i + 1)
+                # Would these then trigger _drift.run?
 
         with self._canvas as draw:
             draw.data.reference()[:, :] = original.copy()

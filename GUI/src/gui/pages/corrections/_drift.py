@@ -157,9 +157,7 @@ class TranslateRegion(ShortCorrectionPage):
         if microscope.ONLINE:
             res = self._drift_resolution.focus.get_data()
             new_reg = self._region @ res
-            top_left = new_reg[images.AABBCorner.TOP_LEFT]
-            print(f"****Scan_res: {res}")
-            
+            top_left = new_reg[images.AABBCorner.TOP_LEFT]            
             area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
             return self._scan(area, True).norm().dynamic().promote()
         else:
@@ -185,7 +183,7 @@ class TranslateRegion(ShortCorrectionPage):
         self.runStart.emit()
         x_shift, y_shift = map(int, self._shift.get_data())
         print(f'x_shift, y_shift :  {x_shift, y_shift}' )
-        time.sleep(3)
+        
         new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
         print('scan complete1')
         new = self._do_scan(x_shift, y_shift)
@@ -246,7 +244,8 @@ class TranslateRegion(ShortCorrectionPage):
         #self._outputs[1, 1].draw(images.GreyImage.blank(overlap).norm(), resize=True)
         #self._outputs[1, 1].draw(overlap.downchannel(0, overlap.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(), resize=True)
         # self._outputs[1, 1].draw( ,resize=True)  
-        
+        self._shift.change_data(self._calculated_shift) # Added by YX 23May2025
+
         self.drift.emit(correction[1], correction[0]) # flipping x and y?
         if microscope.ONLINE:
             self._ref = new # update _ref image with new drift image
