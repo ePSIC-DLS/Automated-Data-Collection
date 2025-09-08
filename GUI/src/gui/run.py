@@ -292,7 +292,7 @@ class GUI(widgets.QMainWindow):
         drift.runStart.connect(lambda: self._pause(-1))
         focus.runEnd.connect(lambda: self._resume(-1))
         drift.runEnd.connect(lambda: self._resume(-1))
-        
+        drift.updatedSurveyImage.connect(stage_1.receive_updated_survey_image)
         # YX commented out these #
         # print("0 - DRIFT CORR RUNNING")
         # stage_5.runStart.connect(drift.run)

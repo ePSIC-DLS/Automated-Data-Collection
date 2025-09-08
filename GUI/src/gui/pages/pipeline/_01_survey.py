@@ -91,6 +91,8 @@ class SurveyImage(ClusterPage, SettingsPage):
         self.runStart.emit()
         region = FullScan(self._canvas.image_size)
         self._scanner.scan_area = region
+        print("###############region defined in SURVEY IMAE:")
+        print(region)
         self._modified_image = self._scan(region, True).norm().dynamic().promote()
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
@@ -184,3 +186,12 @@ class SurveyImage(ClusterPage, SettingsPage):
             
             To actually export the region, use the export button."""
         return s
+    # Below is the slot receiving the updated survey image from _drift corr routine
+    @core.pyqtSlot(images.RGBImage)
+    def receive_updated_survey_image(self, img: images.RGBImage):
+        """
+        Receives an updated survey image and refreshes the canvas display.
+        """
+        self._modified_image = img # .norm().dynamic().promote()
+        self._original_image = img.copy() # Update original image for consistency with future operations
+        self._canvas.draw(self._modified_image)

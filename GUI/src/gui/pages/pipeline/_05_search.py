@@ -408,6 +408,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             
             
         lim = self._canvas.image_size[0]
+        print(f"from 05_search line 411, lim is {lim}")
         for grid in self._regions:
             grid.move((x_shift, y_shift))
             grid.disabled = (any(c < 0 for c in grid[Corners.TOP_LEFT]) or
@@ -504,9 +505,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
-                # YX changeing original self._scanner.scan(return_=False) to:
-                _ = self._scanner.scan()
-                time.sleep(0.001) # YX changed from 1 to 0.001
+
+                _ = self._scanner.scan(return_=False)
+                time.sleep(1) # YX changed from 1 to 0.001
                 merlin_cmd.setValue('TRIGGERSTART', 0)
                 merlin_cmd.setValue('TRIGGERSTOP', 0)
                 time.sleep(1)
@@ -546,7 +547,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('FILEENABLE', 1)
             # trigger set up and filesaving
             merlin_cmd.setValue('SAVEALLTOFILE', 1)
-            merlin_cmd.setValue('USETIMESTAMPING', 0)
+            merlin_cmd.setValue('USETIMESTAMPING', 1)
             # setting up VDF with STEM mode
             merlin_cmd.setValue('SCANX', px_val)
             merlin_cmd.setValue('SCANY', px_val)
@@ -591,7 +592,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     top_left, top_left_4k = region[Corners.TOP_LEFT], region_4k[Corners.TOP_LEFT]
                     bottom_right = region[Corners.BOTTOM_RIGHT]
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
-                                                    (px_val, px_val), top_left_4k)
+                                                    (px_val, px_val+1), top_left_4k) # Adding 1 extra lines 
+                    
+                    print(f"from _05_search Line 597, scan_area: {scan_area._w, scan_area._h}")
                     with self._scanner.switch_scan_area(scan_area):
                         # print(f"******scan area: {scan_area.rect}******")
                         if not os.path.exists(save_path):
@@ -601,7 +604,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         # logging.basicConfig(level=logging.DEBUG,
                         #                     filename=f"{save_path}\\drift.log", filemode="a", force=True)
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        params = f"{save_path}\\{stamp}.hdf5"
+                        params = f"{save_path}\\{stamp}.hdf"
                         if not do_merlin:
                             print("************4********")
                             _reg_scan()

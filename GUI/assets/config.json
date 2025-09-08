@@ -110,7 +110,7 @@
     false
   ],
   "minima": 50,
-  "maxima": 150,
+  "maxima": 200,
   "threshold_inversion": true,
   "algorithm": "Euclidean",
   "square": false,
@@ -126,7 +126,7 @@
     false,
     false
   ],
-  "scan_size": 128,
+  "scan_size": 256,
   "exposure_time": 1e-3,
   "bit_depth": 6,
   "save_path": "X:/data/2025/{session}/Merlin/{sample}",
@@ -137,14 +137,14 @@
     true
   ],
   "scan_mode": true,
-  "session": "'cm40603-3'",
-  "sample": "'test'",
+  "session": "'cm40603-4'",
+  "sample": "'Pt_NP_A3_10umAp'",
   "corrections_enabled": [
     true,
     false,
     false
   ],
-  "scan_resolution": 2048,
+  "scan_resolution": 4096,
   "selected": "raster",
   "raster": {
     "skip": 0,
@@ -180,7 +180,7 @@
     "low": 0,
     "high": 256
   },
-  "drift_scans": 1,
+  "drift_scans": 0,
   "windowing": [
     false,
     false,
