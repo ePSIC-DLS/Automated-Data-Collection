@@ -16,6 +16,8 @@ from ... import utils
 from ..._base import CanvasPage, core, images, ProcessPage, SettingsPage, widgets
 from ..._errors import *
 from .... import load_settings, microscope, validation
+# from ..corrections import _drift
+# from qtpy.QtCore import Slot
 
 import logging
 
@@ -260,7 +262,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
     def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_, done: np.int_,
                  failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
-                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline):
+                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline,drift_correction):
         DeepSearch.SIZES = tuple(s for s in DeepSearch.SIZES if s < size)
         CanvasPage.__init__(self, size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
@@ -327,6 +329,19 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         self._scanner = scanner
 
         self._resolution = default_settings["scan_resolution"]
+        #save_path = X:\data\2025\cm40603-3\Merlin\test_1645
+       
+        
+        #### Adding code for drift correction- MD #####
+        
+        # Yiming added:
+        self.drift_correction = drift_correction
+        # when the user draws a region on survey image, use it as drift reference
+        image.driftRegion.connect(self.drift_correction.set_ref)
+        # whenever a new drift vector is calculated, shift the grids in DeepSearch class
+        self.drift_correction.drift.connect(self.update_grids)
+        self.runStart.connect(self.drift_correction.run)
+        
 
     def _img(self, img: images.RGBImage) -> np.ndarray:
         w, h = self._canvas.image_size
@@ -382,11 +397,18 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             The number of pixels to vertically shift the scan regions.
         """
         msg = f"Shifting all squares by {x_shift, y_shift}"
-        if self._logger is None:
-            print(msg)
-        else:
+        print(msg)
+        
+        # Logging drift parameters
+        if self._logger:
             self._logger.debug(msg)
+        else:
+            # shouldn't happen now, but fallback to root‐logger
+            logging.debug(msg)
+            
+            
         lim = self._canvas.image_size[0]
+        print(f"from 05_search line 411, lim is {lim}")
         for grid in self._regions:
             grid.move((x_shift, y_shift))
             grid.disabled = (any(c < 0 for c in grid[Corners.TOP_LEFT]) or
@@ -407,6 +429,30 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     def run(self):
         if self._state != utils.StoppableStatus.ACTIVE:
             return
+        
+        # Edit by YX: creating logger file
+        save_path = self.get_setting("save_path").format(session=self._session.focus.text()[1:-1],
+                                                         sample=self._sample.focus.text()[1:-1]).replace("/", "\\")
+        self.save_path = save_path
+        
+        log_file = os.path.join(self.save_path,"drift_records.log")
+        os.makedirs(save_path, exist_ok = True)
+        
+        # one‐time logger config
+        if self._logger is None:
+            self._logger = logging.getLogger("drift")
+            self._logger.setLevel(logging.DEBUG)
+            # avoid duplicate handlers
+            if not any(isinstance(h, logging.FileHandler) and h.baseFilename == os.path.abspath(log_file)
+                       for h in self._logger.handlers):
+                fh = logging.FileHandler(log_file, mode="a")
+                fh.setLevel(logging.DEBUG)
+                fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+                fh.setFormatter(fmt)
+                self._logger.addHandler(fh)
+        
+        
+        
         self._regions = self._grids.get_tight()
         if not self._regions:
             raise StagingError("grid search", "exporting tightened grids")
@@ -423,7 +469,6 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     @utils.Stoppable.decorate(manager=ProcessPage.MANAGER)
     @utils.Tracked
     def _run(self, current: typing.Optional[int]):
-
         def _reg_scan():
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 with self._mic.subsystems["Detectors"].switch_inserted(True):
@@ -445,16 +490,24 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Survey Scan", data=self._survey())
 
         def _merlin_scan():
-            merlin_cmd.setValue('FILENAME', f"{stamp}_data")
-            merlin_cmd.setValue('TRIGGERSTART', 1)
+            # time.sleep(1) # YX commenting this out
+            try:
+                print("******First Try******")
+                # merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
+                merlin_cmd.setValue('FILENAME', f"{stamp}_data")
+            except IndexError:
+                print("*****TRY AGAIN!**")
+                merlin_cmd.setValue('FILENAME', f"{stamp}_data")
+            merlin_cmd.setValue('TRIGGERSTART', 1) # YX removing time.sleep(1) in between
             merlin_cmd.setValue('TRIGGERSTOP', 1)
             time.sleep(1)
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
-                self._scanner.scan(return_=False)
-                time.sleep(0.001)
+
+                _ = self._scanner.scan(return_=False)
+                time.sleep(1) # YX changed from 1 to 0.001
                 merlin_cmd.setValue('TRIGGERSTART', 0)
                 merlin_cmd.setValue('TRIGGERSTOP', 0)
                 time.sleep(1)
@@ -483,6 +536,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd = microscope.merlin_connection.MERLIN_connection(hostname)
             print('Setup')
             # <editor-fold desc="Merlin config">
+            print("******Detector STATUS******")
+            merlin_cmd.getVariable('DETECTORSTATUS', PRINT='ON')
+            
             merlin_cmd.setValue('NUMFRAMESTOACQUIRE', pixels)
             merlin_cmd.setValue('COUNTERDEPTH', bit_depth)
             merlin_cmd.setValue('CONTINUOUSRW', 1)
@@ -491,7 +547,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('FILEENABLE', 1)
             # trigger set up and filesaving
             merlin_cmd.setValue('SAVEALLTOFILE', 1)
-            merlin_cmd.setValue('USETIMESTAMPING', 0)
+            merlin_cmd.setValue('USETIMESTAMPING', 1)
             # setting up VDF with STEM mode
             merlin_cmd.setValue('SCANX', px_val)
             merlin_cmd.setValue('SCANY', px_val)
@@ -500,14 +556,15 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('SCANDETECTOR1ENABLE', 1)
             # Standard ADF det
             merlin_cmd.setValue('SCANDETECTOR1TYPE', 0)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 255)
-            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 255)
-            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 50)
-            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 150)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREX', 256)
+            merlin_cmd.setValue('SCANDETECTOR1CENTREY', 256)
+            merlin_cmd.setValue('SCANDETECTOR1INNERRADIUS', 80)
+            merlin_cmd.setValue('SCANDETECTOR1OUTERRADIUS', 250)
             # </editor-fold>
 
         original = self._original_image.data()
         for i, region in enumerate(self._regions):
+            print(f"*********region {i+1}************")
             original = self._original_image.data()
             self._i = i + 1
             if i < current:
@@ -527,7 +584,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 region.draw(draw, self._marker)
                 region.draw(self._original_image, self._done)
                 if not microscope.ONLINE:
-                    time.sleep(0.5)
+                    time.sleep(1)
 
             if microscope.ONLINE:
                 with self._mic.subsystems["Detectors"].switch_inserted(False):
@@ -535,36 +592,48 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     top_left, top_left_4k = region[Corners.TOP_LEFT], region_4k[Corners.TOP_LEFT]
                     bottom_right = region[Corners.BOTTOM_RIGHT]
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
-                                                    (px_val, px_val), top_left_4k)
+                                                    (px_val, px_val+1), top_left_4k) # Adding 1 extra lines 
+                    
+                    print(f"from _05_search Line 597, scan_area: {scan_area._w, scan_area._h}")
                     with self._scanner.switch_scan_area(scan_area):
+                        # print(f"******scan area: {scan_area.rect}******")
                         if not os.path.exists(save_path):
                             os.makedirs(save_path)
                             print(f"Made dir: {save_path}")
-                        self._logger = logging.Logger("drift", level=logging.DEBUG)
-                        logging.basicConfig(level=logging.DEBUG,
-                                            filename=f"{save_path}\\drift.log", filemode="a", force=True)
+                        # self._logger = .Logger("drift", level=logging.DEBUG)
+                        # logging.basicConfig(level=logging.DEBUG,
+                        #                     filename=f"{save_path}\\drift.log", filemode="a", force=True)
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        params = f"{save_path}\\{stamp}.hdf5"
+                        params = f"{save_path}\\{stamp}.hdf"
                         if not do_merlin:
+                            print("************4********")
                             _reg_scan()
                         else:
                             print(params)
+                            print("************3********")
                         _file_write()
+                        
                         if do_merlin:
                             with h5py.File(params, "a") as co_ords:
                                 dset = co_ords.create_group("Co-ordinates (cartesian, non-scaled)")
                                 dset.attrs["top left"] = top_left
                                 dset.attrs["bottom right"] = bottom_right
                             merlin_params = {'set_dwell_time(usec)': exposure, 'set_scan_px': px_val,
-                                             'set_bit_depth': bit_depth}
+                                              'set_bit_depth': bit_depth}
                             self._mic.export(params, px_val, **merlin_params)
                             with self._scanner.using_connection(6, microscope.TTLMode.SOURCE_TIMED,
                                                                 microscope.PixelClock(microscope.EdgeType.RISING),
                                                                 active=1e-5):
+                                print("************2********")
                                 _merlin_scan()
+
+                            
+                            
             if self._progress.isEnabled():
+                print("************1********")
                 self.scanPerformed.emit()
                 self._clusterScanned.emit(i + 1)
+                # Would these then trigger _drift.run?
 
         with self._canvas as draw:
             draw.data.reference()[:, :] = original.copy()

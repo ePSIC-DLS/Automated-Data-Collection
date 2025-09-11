@@ -60,7 +60,6 @@ class TranslateRegion(ShortCorrectionPage):
         Alias for `_limit` to maintain a clean global namespace for the DSL.
     """
     drift = core.pyqtSignal(int, int)
-    # A new Qt signal defined to capture the updated Survey image
     updatedSurveyImage = core.pyqtSignal(images.RGBImage)
     SIZES = (256, 512, 1024, 2048, 4096, 8192, 16384)
 
@@ -72,6 +71,8 @@ class TranslateRegion(ShortCorrectionPage):
         self._scanner = scanner
         self._scan = scan_func
         self._size = survey_size[0]
+        self._full_survey_size = survey_size
+        print(f"******Full Survey size set to: {self._full_survey_size}")
 
         self._ref: _None[images.GreyImage] = None
         self._region: _None[utils.ScanRegion] = None
@@ -97,13 +98,6 @@ class TranslateRegion(ShortCorrectionPage):
                                                ))
 
         resolution = TranslateRegion.SIZES.index(default_settings["drift_resolution"])
-        
-        # YX added 04/Sept
-        print(f'self._size = {self._size} drift_resolution = {default_settings["drift_resolution"]}')
-        drift_resolution = default_settings["drift_resolution"]
-        self.corr_scaling_factor = self._size/drift_resolution
-        
-        
         self._drift_resolution = utils.LabelledWidget("Reference Resolution",
                                                       utils.ComboBox(*TranslateRegion.SIZES, start_i=resolution),
                                                       utils.LabelOrder.SUFFIX)
@@ -136,22 +130,38 @@ class TranslateRegion(ShortCorrectionPage):
         """
         self._amount.increase()
 
-    def set_ref(self, tl: _tuple[int, int], br: _tuple[int, int]):
-        """
-        Method to set a reference image.
+    # def set_ref(self, tl: _tuple[int, int], br: _tuple[int, int]):
+    #     """
+    #     Method to set a reference image.
 
-        This will store a region, an image, and reset the number of scans performed.
+    #     This will store a region, an image, and reset the number of scans performed.
 
-        Parameters
-        ----------
-        tl: tuple[int, int]
-            The top-left co-ordinate of the region.
-        br: tuple[int, int]
-            The bottom-right co-ordinate of the region.
+    #     Parameters
+    #     ----------
+    #     tl: tuple[int, int]
+    #         The top-left co-ordinate of the region.
+    #     br: tuple[int, int]
+    #         The bottom-right co-ordinate of the region.
+    #     """
+    #     self._region = utils.ScanRegion(tl, br[0] - tl[0], self._size)
+    #     self._ref = self._do_scan(0, 0)
+    #     print(f"*****Size of the drift corr area: {self._ref.size}*****")
+    #     self._amount.set_current(0)
+    #     self._outputs[0, 0].draw(self._ref, resize=True)
+    #     self._display_popup(self._outputs)
+    #     return self._ref
+    
+
+    # Modified: set_ref now works on the full survey image
+    def set_ref(self):
         """
-        self._region = utils.ScanRegion(tl, br[0] - tl[0], self._size)
+        Method to set a reference image using the full survey area.
+
+        This will store the full survey image as a reference and reset the number of scans performed.
+        """
+        # Call _do_scan with shifts 0,0 to get the initial full survey image
         self._ref = self._do_scan(0, 0)
-        print(f"*****Size of the drift corr area: {self._ref.size}*****")
+        print(f"*****Size of the drift corr area (full survey): {self._ref.size}*****")
         self._amount.set_current(0)
         self._outputs[0, 0].draw(self._ref, resize=True)
         self._display_popup(self._outputs)
@@ -162,19 +172,51 @@ class TranslateRegion(ShortCorrectionPage):
         return self._amount.check()
         
 
+       # Modified: _do_scan now uses the full survey dimensions
     def _do_scan(self, x_shift: int, y_shift: int) -> images.RGBImage:
         if microscope.ONLINE:
-            res = self._drift_resolution.focus.get_data()
-            new_reg = self._region @ res
-            top_left = new_reg[images.AABBCorner.TOP_LEFT]            
-            area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
+            res_val = self._drift_resolution.focus.get_data() # This is the chosen resolution for the scan
+            # Create an AreaScan for the full survey size, potentially at the chosen resolution
+            # If res_val is larger than survey_size, it implies upsampling
+            # The actual area to scan is the full survey dimensions
+            area = microscope.AreaScan(
+                (res_val, res_val), # Scan resolution in pixels
+                self._full_survey_size, # Physical size of the full survey area (e.g., in microns)
+                (0, 0) # Top-left corner of the full survey area (assuming origin)
+            )
+            # The scan function should handle the requested area and return the image
             return self._scan(area, True).norm().dynamic().promote()
         else:
-            x_min, y_min = self._region[images.AABBCorner.TOP_LEFT]
-            x_max, y_max = self._region[images.AABBCorner.BOTTOM_RIGHT]
+            # Offline simulation: Load a full image or a large enough region
+            # This needs to be a full image representing the survey area
             full = images.GreyImage.from_file("./assets/img_3.bmp")
-            return full.region((x_min + x_shift, y_min + y_shift), (x_max + x_shift, y_max + y_shift)).promote()
+            # Assuming img_3.bmp is large enough to represent the full survey
+            # and that we simply take the top-left portion matching survey_size
+            # If img_3.bmp is *the* full survey image, just return it directly
+            # For demonstration, we'll ensure it's at least the survey_size
+            if full.size[0] < self._full_survey_size[0] or full.size[1] < self._full_survey_size[1]:
+                 raise ValueError("Dummy image 'img_3.bmp' is too small for the full survey size.")
 
+            # If you need to simulate shifts for offline mode on the full image:
+            # This part needs careful consideration if 'x_shift'/'y_shift' are applied
+            # to the *entire* image for correlation.
+            # For a full survey image, these shifts apply to the 'new' scan relative to the 'ref'.
+            # The region function below might still be useful if img_3.bmp is a larger canvas
+            # from which the current "full survey" view is extracted, with shifts.
+            # Otherwise, you just return the full image:
+            # return full.promote()
+            # If img_3.bmp is just a reference, you'd need another dummy image for the 'new' scan.
+
+            # For a more direct "full image" simulation:
+            # Assuming img_3.bmp represents the *current* full survey scan
+            # and x_shift/y_shift are inherent to it from the previous measurement.
+            # This needs to accurately simulate the *new* scan with previous accumulated drift.
+            # A simpler approach for offline: always load the *full* image
+            return full.region(
+                (x_shift, y_shift), # Start extracting from this shifted point on the larger canvas
+                self._full_survey_size # Extract a region of the full survey size
+            ).promote()
+        
     def start(self):
         ShortCorrectionPage.start(self)
         self._display_popup(self._outputs)
@@ -188,7 +230,9 @@ class TranslateRegion(ShortCorrectionPage):
         if not self.isEnabled():
             return
         if self._ref is None:
-            raise StagingError("drift correction", "exporting drift region")
+        #     raise StagingError("drift correction", "exporting drift region")
+        # Changed error message as region is no longer exported
+            raise StagingError("drift correction", "reference image not set (full survey)")
         self.runStart.emit()
         x_shift, y_shift = map(int, self._shift.get_data())
         print(f'x_shift, y_shift :  {x_shift, y_shift}' )
@@ -196,13 +240,10 @@ class TranslateRegion(ShortCorrectionPage):
         new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
         print('scan complete1')
         new = self._do_scan(x_shift, y_shift)
-        print('scan complete2')
+        print('scan complete2') # Why twice?
 
         ref_mask = self._window(self._ref.convert(np.float64))
         new_mask = self._window(new.convert(np.float64))
-        
-        print(f"from _drift line 195, new image size is: {new.convert(np.float64).shape}")
-
         
         print('window update')
 
@@ -225,22 +266,12 @@ class TranslateRegion(ShortCorrectionPage):
         #new_pad = np.zeros((new_mask.shape[0]+pad*2, new_mask.shape[1]+pad*2))
         # ref_pad[pad:-pad, pad:-pad] = ref_mask
         # new_pad[pad:-pad, pad:-pad] = new_mask
-        print(f"******ref and new images padded: {ref_pad.shape, new_pad.shape}")
+        print(f"******ref and new images padded: {ref_pad.size, new_pad.size}")
         
         corr, error, _ = convolve(ref_pad, new_pad) #convolve(ref_mask, new_mask)
-        
-
         shift = -corr
         print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
-        
-        # Added 04/Sept:
-        # shift_norm = shift / resolution # 4096
-        # shift_applied = shift_norm * survey_size[0] # 512
-        print(f"##### shift factor: {self.corr_scaling_factor} ######")
-        shift_applied = shift * self.corr_scaling_factor
-
-        ####
-        self._calculated_shift = tuple(shift_applied)
+        self._calculated_shift = tuple(shift)
         print(f"##### updated shift: {self._calculated_shift} ######")
 
         # pre-initialised _calculated_shift in _init
@@ -248,9 +279,7 @@ class TranslateRegion(ShortCorrectionPage):
         self._outputs[0, 1].draw(new, resize=True)
         print(type(self._outputs[0, 1]))
         shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) # modified by JR (10.04.2025)
-        # correction = shift.astype(np.int_)
-        # Debugging 04/Sept: applying normalisation and sampling factor correction to shift
-        correction_app = shift_applied.astype(np.int_)
+        correction = shift.astype(np.int_)
         
         #making a image to dispaly the overlap between the two images
         shifted_mask = np.where(new_pad>0,255,0)
@@ -269,21 +298,15 @@ class TranslateRegion(ShortCorrectionPage):
         #self._outputs[1, 1].draw(overlap.downchannel(0, overlap.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(), resize=True)
         # self._outputs[1, 1].draw( ,resize=True)  
         self._shift.change_data(self._calculated_shift) # Added by YX 23May2025
-        
-        self.drift.emit(correction_app[1], correction_app[0]) # YX 04Sept
+
+        self.drift.emit(correction[1], correction[0]) # flipping x and y?
         if microscope.ONLINE:
             self._ref = new # update _ref image with new drift image
-            updatedSurveyImage = self._scan(
-                microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
-                ).norm().dynamic().promote()
-            print("Scanning for the second time!!")
-            updatedSurveyImage = self._scan(
-                microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
-                ).norm().dynamic().promote()
-            print("##################################")
-            print(type(updatedSurveyImage))
-            # Here emitting the updated Survey image
-            self.updatedSurveyImage.emit(updatedSurveyImage)
+            updated_survey_image = self._scan(
+                microscope.AreaScan(self._o_size, self._o_size, (0, 0)),
+                False # Assuming False for dynamic acquisition unless specified otherwise
+            )
+            self.updatedSurveyImage.emit(updated_survey_image)
         self._display_popup(self._outputs)
         self.runEnd.emit()
 

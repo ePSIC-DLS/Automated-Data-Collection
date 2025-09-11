@@ -207,8 +207,6 @@ class Scanner(SettingsPage):
         The actual scan engine.
     _mic: Microscope
         The link to the microscope.
-    _stage: LabelledWidget[XDControl[Spinbox]]
-        The controller for the stage position.
     _exposure: LabelledWidget[Spinbox]
         The dwell time of normal scans.
     _flyback: LabelledWidget[Spinbox]
@@ -224,12 +222,6 @@ class Scanner(SettingsPage):
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR)
         self._scanner = scanner
         self._mic = mic
-
-        self._stage = utils.LabelledWidget("Stage Position",
-                                           utils.XDControl(3, utils.Spinbox, initial=0, step=1,
-                                                           pipeline=validation.examples.stage_pos),
-                                           utils.LabelOrder.SUFFIX)
-        self._stage.focus.dataPassed.connect(self._stage_moved)
 
         self._exposure = utils.LabelledWidget("Dwell Time",
                                               utils.Spinbox(self._scanner.dwell_time, 100e-6,
@@ -255,7 +247,7 @@ class Scanner(SettingsPage):
         self._regular.addWidget(self._exposure)
         self._regular.addWidget(self._flyback)
         self._regular.addWidget(utils.LabelledWidget("Peripheral Management", wid, utils.LabelOrder.SUFFIX))
-        self._regular.addWidget(self._stage)
+
         self._connected = tuple(ConnectionManager(i) for i in range(10))
         for cnctn in self._connected:
             cnctn.exported.connect(self._add_connection)
@@ -270,15 +262,6 @@ class Scanner(SettingsPage):
         self._flyback.focus.change_data(self._scanner.flyback)
         for ln, cnctn in zip(self._scanner.lines, self._connections):
             cnctn.setText(ln)
-        xyz = [0, 0, 0]
-        stage = self._mic.subsystems["Stage"]
-        with stage.switch_axis(microscope.Axis.X):
-            with stage.switch_axis(microscope.Axis.Y):
-                with stage.switch_axis(microscope.Axis.Z):
-                    xyz[2] = stage.pos
-                xyz[1] = stage.pos
-            xyz[0] = stage.pos
-        self._stage.focus.change_data(tuple(xyz))
 
     def stop(self):
         SettingsPage.stop(self)
@@ -320,16 +303,6 @@ class Scanner(SettingsPage):
                 with self._mic.subsystems["Deflectors"].switch_blanked(False):
                     with self._mic.subsystems["Detectors"].switch_inserted(detector_status):
                         return self._scanner.scan()
-
-    def _stage_moved(self, xyz: _tuple[int, int, int]):
-        stage = self._mic.subsystems["Stage"]
-        with stage.switch_axis(microscope.Axis.X):
-            with stage.switch_axis(microscope.Axis.Y):
-                with stage.switch_axis(microscope.Axis.Z):
-                    stage.pos = xyz[2]
-                stage.pos = xyz[1]
-            stage.pos = xyz[0]
-        self.read()
 
     @utils.Tracked
     def _add_connection(self, kwargs: _dict[str, object]):

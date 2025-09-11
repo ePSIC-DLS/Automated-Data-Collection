@@ -378,7 +378,8 @@ if QD:
                 self._engine.stop_imaging()
                 monitor.wait_for_image()
                 if return_:
-                    return GreyImage(monitor.pop().get_input_data(3)[sy:ey, sx:ex])
+                    img = monitor.pop().get_input_data(3)[sy:ey, sx:ex]
+                    return GreyImage(img.astype(np.int_))
             elif return_:
                 return GreyImage.from_file("./assets/img_3.bmp", do_static=True)
 

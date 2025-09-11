@@ -1,3 +1,0 @@
-plot STD compared to theta
-Track changes to correlate effect of deflector value
-Correlate deflector values to affine transform matrix - allow for inversion

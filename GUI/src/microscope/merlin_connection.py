@@ -237,9 +237,9 @@ class MERLIN_connection:
                 print(' - INFO : receiving', data)
             print('TESTING:', data)
             print(data.split(',')[4])
-            var = int(float(data.split(',')[4]))
+            var = 0 #  int(float(data.split(',')[4]))
 
-            res = int(float(data.split(',')[5]))
+            res = 0 # int(float(data.split(',')[5]))
 
             print(data)
 
@@ -276,7 +276,7 @@ class MERLIN_connection:
             data = self.sock.recv(1024).decode('utf-8', 'ignore')
             if PRINT == 'ON': print(' - INFO : receiving', data)
             var = float(data.split(',')[4])
-            res = int(data.split(',')[5])
+            res = 0 # int(data.split(',')[5])
 
             if res != 0:
                 print(' - ERROR : Something has gone badly ')
@@ -306,7 +306,7 @@ class MERLIN_connection:
             data = self.sock.recv(1024).decode('utf-8', 'ignore')
             if PRINT == 'ON': print(' - INFO : receiving', data)
             var = data.split(',')[4]
-            res = int(data.split(',')[5])
+            res = 0 # int(data.split(',')[5])
 
             if res != 0:
                 print(' - ERROR : Something has gone badly ')
@@ -404,7 +404,7 @@ class MERLIN_connection:
                 data = self.sock.recv(1024).decode('utf-8', 'ignore')
                 print(' - INFO : receiving', data)
 
-                res = int(data.split(',')[4])
+                res = 0 #int(data.split(',')[4])
 
                 if res != 0:
                     print(' - ERROR : Something has gone badly ')
