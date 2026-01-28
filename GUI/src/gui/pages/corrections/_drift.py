@@ -192,11 +192,17 @@ class TranslateRegion(ShortCorrectionPage):
         self.runStart.emit()
         x_shift, y_shift = map(int, self._shift.get_data())
         print(f'x_shift, y_shift :  {x_shift, y_shift}' )
+
+
+        with self._link.subsystems["Detectors"].switch_inserted(True):
+            print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
+            time.sleep(2.5)        
+            new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
+            print('scan complete1')
         
-        new = self._do_scan(x_shift, y_shift) # take new drift image: x_shift, y_shift are previous itteration measurements
-        print('scan complete1')
-        new = self._do_scan(x_shift, y_shift)
-        print('scan complete2')
+        
+        # new = self._do_scan(x_shift, y_shift)
+        # print('scan complete2')
 
         ref_mask = self._window(self._ref.convert(np.float64))
         new_mask = self._window(new.convert(np.float64))
@@ -273,17 +279,22 @@ class TranslateRegion(ShortCorrectionPage):
         self.drift.emit(correction_app[1], correction_app[0]) # YX 04Sept
         if microscope.ONLINE:
             self._ref = new # update _ref image with new drift image
-            updatedSurveyImage = self._scan(
-                microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
-                ).norm().dynamic().promote()
-            print("Scanning for the second time!!")
-            updatedSurveyImage = self._scan(
-                microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
-                ).norm().dynamic().promote()
-            print("##################################")
-            print(type(updatedSurveyImage))
-            # Here emitting the updated Survey image
-            self.updatedSurveyImage.emit(updatedSurveyImage)
+            # updatedSurveyImage = self._scan(
+            #     microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
+            #     ).norm().dynamic().promote()
+            # print("Scanning for the second time!!")
+            with self._link.subsystems["Detectors"].switch_inserted(True):
+                print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
+                time.sleep(2.5)
+                
+                updatedSurveyImage = self._scan(
+                    microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
+                    ).norm().dynamic().promote()
+                print("##################################")
+                print(type(updatedSurveyImage))
+                # Here emitting the updated Survey image
+                self.updatedSurveyImage.emit(updatedSurveyImage)
+                
         self._display_popup(self._outputs)
         self.runEnd.emit()
 

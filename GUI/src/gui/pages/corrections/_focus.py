@@ -58,6 +58,7 @@ class AutoFocus(ShortCorrectionPage):
         super().__init__(mic)
         self._scanner = scanner
         self._scan = scan_func
+        self._survey_size = survey_size # YX added
         self._region = microscope.FullScan(survey_size)
 
         self._focus_scans = utils.Spinbox(default_settings["focus_scans"], 1, validation.examples.focus)
@@ -120,6 +121,10 @@ class AutoFocus(ShortCorrectionPage):
         self._focus_limit = self._limit
 
         self.setLayout(self._layout)
+        
+    def set_region(self,tl:_tuple[int,int],br:_tuple[int,int]):
+        # Added 20260128 
+        self._region = microscope.AreaScan.from_corners(self._survey_size, tl, br)
 
     def scans_increased(self):
         """Method to increase the number of scans by 1."""
@@ -341,17 +346,22 @@ class AutoFocus(ShortCorrectionPage):
 
             # --- Execution ---
             with link.switch_lens(microscope.Lens.OL_FINE):
-                limit_val = int(self._limit.focus.get_data())
-                fine_step = int(self._df.focus.get_data())
-                
-                # Dynamic coarse step: ensure we get ~8-10 points across the range
-                coarse_step = max(fine_step * 2, int(limit_val / 4))
-                
-                coarse_range = range(-limit_val, limit_val + 1, coarse_step)
-                # Fine window is the size of 2 coarse steps to ensure overlap
-                fine_window = coarse_step * 2
-
-                optimize_robust(coarse_range, fine_step, fine_window)
+                with self._link.subsystems["Detectors"].switch_inserted(True):
+                    print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
+                    time.sleep(2.5)
+                    
+                    
+                    limit_val = int(self._limit.focus.get_data())
+                    fine_step = int(self._df.focus.get_data())
+                    
+                    # Dynamic coarse step: ensure we get ~8-10 points across the range
+                    coarse_step = max(fine_step * 2, int(limit_val / 4))
+                    
+                    coarse_range = range(-limit_val, limit_val + 1, coarse_step)
+                    # Fine window is the size of 2 coarse steps to ensure overlap
+                    fine_window = coarse_step * 2
+    
+                    optimize_robust(coarse_range, fine_step, fine_window)
 
         self.runEnd.emit()
 

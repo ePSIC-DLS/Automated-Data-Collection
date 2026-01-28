@@ -194,7 +194,9 @@ class GUI(widgets.QMainWindow):
         drift = corrections["drift"]
         # YX: moving stage_5 here so the drift_correction can be added in initialisation
         stage_5 = pages.pipeline.DeepSearch(size, stage_4, stage_1, marker_colour, finished_colour, _data_failed,
-                                            self._microscope, self._scanner, stage_3, stage_2, drift_correction=drift)
+                                            self._microscope, self._scanner, stage_3, stage_2, drift_correction=drift,
+                                            focus_correction = focus # YX added 20260128
+                                            )
 
 
         stage_a = pages.additionals.Scripts(
