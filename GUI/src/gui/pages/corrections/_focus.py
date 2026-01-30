@@ -133,7 +133,8 @@ class AutoFocus(ShortCorrectionPage):
         self._scans.increase()
 
     def query(self):
-        self._scans.check()
+        """Checks if the scan limit has been reached."""
+        return self._scans.check()
 
     def start(self):
         ShortCorrectionPage.start(self)
@@ -205,9 +206,7 @@ class AutoFocus(ShortCorrectionPage):
                     
                     # 5. Create AreaScan with upscaled resolution and size
                     scan_area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
-                else:
-                    scan_area = self._region
-
+                
                 # grey_img = self._scan(scan_area, True)
 
                 grey_img = self._scan(scan_area, True).norm().dynamic().promote()
@@ -396,6 +395,7 @@ class AutoFocus(ShortCorrectionPage):
                 with self._link.subsystems["Detectors"].switch_inserted(True):
                     print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
                     time.sleep(2.5)
+                    
                     
                     limit_val = int(self._limit.focus.get_data())
                     fine_step = int(self._df.focus.get_data())

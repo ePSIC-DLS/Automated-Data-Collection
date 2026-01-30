@@ -69,6 +69,7 @@ class TranslateRegion(ShortCorrectionPage):
                  survey_size: _tuple[int, int]):
         super().__init__(mic)
         TranslateRegion.SIZES = tuple(s for s in TranslateRegion.SIZES if s > survey_size[0])
+        
         self._scanner = scanner
         self._scan = scan_func
         self._size = survey_size[0]
@@ -168,6 +169,8 @@ class TranslateRegion(ShortCorrectionPage):
         if microscope.ONLINE:
             res = self._drift_resolution.focus.get_data()
             new_reg = self._region @ res
+            print(res)
+            print(new_reg)
             top_left = new_reg[images.AABBCorner.TOP_LEFT]            
             area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
             return self._scan(area, True).norm().dynamic().promote()
@@ -313,6 +316,15 @@ class TranslateRegion(ShortCorrectionPage):
         self._shift.change_data(self._calculated_shift) # Added by YX 23May2025
         
         self.drift.emit(correction_app[1], correction_app[0]) # YX 04Sept
+
+        # NEW: Update the Drift Scan Region to "chase" the drifting feature
+        # ---------------------------------------------------------------------
+        # correction_app is [y, x], but move() expects (x, y)
+        if self._region is not None:
+             self._region.move((correction_app[1], correction_app[0]))
+             print(f"Drift Scan Region moved by: {correction_app[1], correction_app[0]}")
+        # ---------------------------------------------------------------------
+        
         if microscope.ONLINE:
             self._ref = new # update _ref image with new drift image
             # updatedSurveyImage = self._scan(

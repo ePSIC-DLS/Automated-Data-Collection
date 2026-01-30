@@ -193,7 +193,7 @@
   ],
   "drift_resolution": 4096,
   "min_emission": 3.5,
-  "focus_scans": 0,
+  "focus_scans": 10,
   "focus_change": "0010",
   "change_decay": 0.2,
   "focus_tolerance": "0001",
