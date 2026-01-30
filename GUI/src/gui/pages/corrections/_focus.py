@@ -21,6 +21,8 @@ default_settings = load_settings("assets/config.json",
                                  change_decay=validation.examples.focus_decay,
                                  focus_tolerance=validation.examples.lens_value,
                                  focus_limit=validation.examples.focus_limit_hex,
+                                 focus_ROI=validation.examples.any_str,
+                                 drift_resolution=validation.examples.resolution,
                                  )
 
 
@@ -60,6 +62,7 @@ class AutoFocus(ShortCorrectionPage):
         self._scan = scan_func
         self._survey_size = survey_size # YX added
         self._region = microscope.FullScan(survey_size)
+        self._drift_region = None
 
         self._focus_scans = utils.Spinbox(default_settings["focus_scans"], 1, validation.examples.focus)
         self._scans = utils.Counter(self._focus_scans, "Number of scans since last routine", start=0)
@@ -122,9 +125,8 @@ class AutoFocus(ShortCorrectionPage):
 
         self.setLayout(self._layout)
         
-    def set_region(self,tl:_tuple[int,int],br:_tuple[int,int]):
-        # Added 20260128 
-        self._region = microscope.AreaScan.from_corners(self._survey_size, tl, br)
+    def set_region(self, tl: _tuple[int, int], br: _tuple[int, int]):
+        self._drift_region = (tl, br)
 
     def scans_increased(self):
         """Method to increase the number of scans by 1."""
@@ -151,6 +153,26 @@ class AutoFocus(ShortCorrectionPage):
         self.runStart.emit()
 
         if microscope.ONLINE:
+            
+            # if self.focus_corr_type = 'JEOL':
+                
+            #     with link.switch_lens(microscope.Lens.OL_FINE):
+            #         with self._link.subsystems["Detectors"].switch_inserted(True):
+            #             print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
+            #             time.sleep(2.5)
+                
+            #             ### autofocus code:
+            #             #check detector is in and beam is unblanked
+            #             mydet.set_imaging_area(256,256) # sets full scan resolution maybe not needed
+            #             #areeamode needs to be in units of imaging_area
+            #             mydet.set_areamode_imagingarea(64,64, 16,16) # set scan area box (resx, resy, posx, posy)
+            #             mydet.set_scanmode(3)
+            #             mydet.AutoFocus()    
+            #             mydet.set_scanmode(0)
+                
+                
+                
+            # elif self.focus_corr_type = 'Python':
             link = self._link.subsystems["Lenses"]
 
             # --- Helper Functions ---
@@ -163,8 +185,33 @@ class AutoFocus(ShortCorrectionPage):
             def _scan_and_measure(val: int) -> typing.Tuple[float, np.ndarray]:
                 """Sets lens, scans, updates GUI canvas, returns (variance, image_data)."""
                 link.value = int(val)
-                grey_img = self._scan(self._region, True)
-                self._plot.draw(grey_img.norm().dynamic().promote())
+                scan_area = self._region
+                
+                if default_settings["focus_ROI"] == "drift" and self._drift_region is not None:
+                    tl, br = self._drift_region
+                    
+                    # --- Exact logic from _drift.py ---
+                    # 1. Create ScanRegion wrapper (matches _drift.py set_ref logic)
+                    drift_region_wrapper = utils.ScanRegion(tl, br[0] - tl[0], self._survey_size[0])
+                    
+                    # 2. Get resolution from settings (matches _drift.py _do_scan logic)
+                    res = default_settings["drift_resolution"]
+                    
+                    # 3. Apply resolution scaling (matches _drift.py _do_scan logic)
+                    new_reg = drift_region_wrapper @ res
+                    
+                    # 4. Extract parameters
+                    top_left = new_reg[images.AABBCorner.TOP_LEFT]
+                    
+                    # 5. Create AreaScan with upscaled resolution and size
+                    scan_area = microscope.AreaScan((res, res), (new_reg.size, new_reg.size), top_left)
+                else:
+                    scan_area = self._region
+
+                # grey_img = self._scan(scan_area, True)
+
+                grey_img = self._scan(scan_area, True).norm().dynamic().promote()
+                self._plot.draw(grey_img)
                 data = grey_img.data().astype(np.float64)
                 return _norm_var(data), data
 
@@ -349,7 +396,6 @@ class AutoFocus(ShortCorrectionPage):
                 with self._link.subsystems["Detectors"].switch_inserted(True):
                     print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")
                     time.sleep(2.5)
-                    
                     
                     limit_val = int(self._limit.focus.get_data())
                     fine_step = int(self._df.focus.get_data())

@@ -349,7 +349,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         # whenever a new drift vector is calculated, shift the grids in DeepSearch class
         self.drift_correction.drift.connect(self.update_grids)
         self.runStart.connect(self.drift_correction.run)
-        self.runStart.connect(self.focus_correction.run)
+        self.runStart.connect(self.focus_correction.run)# added to run focus before merlin
         
 
     def _img(self, img: images.RGBImage) -> np.ndarray:

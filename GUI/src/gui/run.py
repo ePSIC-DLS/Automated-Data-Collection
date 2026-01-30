@@ -287,6 +287,8 @@ class GUI(widgets.QMainWindow):
         stage_p.settingChanged.connect(_update_pitches)
 
         stage_1.driftRegion.connect(drift.set_ref)
+        stage_1.driftRegion.connect(focus.set_region) # YX added 20260130_1355
+
         stage_5.scanPerformed.connect(focus.scans_increased)
         stage_5.scanPerformed.connect(drift.scans_increased)
 

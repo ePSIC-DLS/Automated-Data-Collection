@@ -73,6 +73,8 @@ class TranslateRegion(ShortCorrectionPage):
         self._scan = scan_func
         self._size = survey_size[0]
 
+        self._drift_accumulator = np.zeros(2, dtype=np.float64)
+
         self._ref: _None[images.GreyImage] = None
         self._region: _None[utils.ScanRegion] = None
 
@@ -233,31 +235,65 @@ class TranslateRegion(ShortCorrectionPage):
         # new_pad[pad:-pad, pad:-pad] = new_mask
         print(f"******ref and new images padded: {ref_pad.shape, new_pad.shape}")
         
-        corr, error, _ = convolve(ref_pad, new_pad) #convolve(ref_mask, new_mask)
+        # corr, error, _ = convolve(ref_pad, new_pad) #convolve(ref_mask, new_mask)
         
+
+        # shift = -corr
+        # print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
+        
+        # # Added 04/Sept:
+        # # shift_norm = shift / resolution # 4096
+        # # shift_applied = shift_norm * survey_size[0] # 512
+        # print(f"##### shift factor: {self.corr_scaling_factor} ######")
+        # shift_applied = shift * self.corr_scaling_factor
+
+        # ####
+        # self._calculated_shift = tuple(shift_applied)
+        # print(f"##### updated shift: {self._calculated_shift} ######")
+
+        # # pre-initialised _calculated_shift in _init
+        # # self._shift.change_data(shift)
+        # self._outputs[0, 1].draw(new, resize=True)
+        # print(type(self._outputs[0, 1]))
+        # shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) # modified by JR (10.04.2025)
+
+
+        # correction = shift.astype(np.int_)
+        # Debugging 04/Sept: applying normalisation and sampling factor correction to shift
+        # correction_app = shift_applied.astype(np.int_) # commented out 13:13 30-01-26
+        
+        corr, error, _ = convolve(ref_pad, new_pad) 
 
         shift = -corr
         print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
-        
-        # Added 04/Sept:
-        # shift_norm = shift / resolution # 4096
-        # shift_applied = shift_norm * survey_size[0] # 512
+
+        # --- START ACCUMULATOR LOGIC ---
+
+        # 1. Calculate precise drift for THIS scan (Float) [dy, dx]
+        step_drift = shift * self.corr_scaling_factor
+
+        # 2. Add to accumulator (The "Bucket")
+        # This adds y to y, and x to x automatically
+        self._drift_accumulator += step_drift
+
+        # 3. Extract the integer part to apply now (Result is [int_y, int_x])
+        correction_app = self._drift_accumulator.astype(np.int_)
+
+        # 4. Remove the applied integer from the bucket, leaving the decimal remainder
+        self._drift_accumulator -= correction_app
+
+        # --- END ACCUMULATOR LOGIC ---
+
         print(f"##### shift factor: {self.corr_scaling_factor} ######")
-        shift_applied = shift * self.corr_scaling_factor
+        print(f"##### updated shift (applied): {correction_app} | remainder: {self._drift_accumulator} ######")
 
-        ####
-        self._calculated_shift = tuple(shift_applied)
-        print(f"##### updated shift: {self._calculated_shift} ######")
-
-        # pre-initialised _calculated_shift in _init
-        # self._shift.change_data(shift)
+        # Standard updates
+        self._calculated_shift = tuple(correction_app)
         self._outputs[0, 1].draw(new, resize=True)
-        print(type(self._outputs[0, 1]))
-        shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) # modified by JR (10.04.2025)
-        # correction = shift.astype(np.int_)
-        # Debugging 04/Sept: applying normalisation and sampling factor correction to shift
-        correction_app = shift_applied.astype(np.int_)
-        
+
+        # Reference shift for display (keeps high-res shift)
+        shifted_ref = np.real(np.fft.ifft2(imgs.fourier_shift(np.fft.fft2(ref_mask), shift))).astype(np.int_) 
+
         #making a image to dispaly the overlap between the two images
         shifted_mask = np.where(new_pad>0,255,0)
         unshifted_mask = np.where(ref_pad>0,255,0)
@@ -357,3 +393,4 @@ class TranslateRegion(ShortCorrectionPage):
             
             The upscaled resolution to scan each image in."""
         return s
+

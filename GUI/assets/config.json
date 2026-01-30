@@ -197,5 +197,6 @@
   "focus_change": "0010",
   "change_decay": 0.2,
   "focus_tolerance": "0001",
-  "focus_limit": "0083"
+  "focus_limit": "0083",
+  "focus_ROI": "full"
 }
