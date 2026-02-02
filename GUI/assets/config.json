@@ -126,10 +126,10 @@
     false,
     false
   ],
-  "scan_size": 256,
+  "scan_size": 128,
   "exposure_time": 1e-3,
   "bit_depth": 6,
-  "save_path": "X:/data/2025/{session}/Merlin/{sample}",
+  "save_path": "X:/data/2026/{session}/Merlin/{sample}",
   "checkpoints": [
     true,
     true,
@@ -137,11 +137,11 @@
     true
   ],
   "scan_mode": true,
-  "session": "'cm40603-4'",
-  "sample": "'Pt_NP_A3_10umAp'",
+  "session": "'cm44133-1'",
+  "sample": "'au_xgrating_overnight'",
   "corrections_enabled": [
     true,
-    false,
+    true,
     false
   ],
   "scan_resolution": 4096,
@@ -180,7 +180,7 @@
     "low": 0,
     "high": 256
   },
-  "drift_scans": 0,
+  "drift_scans": 2,
   "windowing": [
     false,
     false,
@@ -193,9 +193,10 @@
   ],
   "drift_resolution": 4096,
   "min_emission": 3.5,
-  "focus_scans": 30,
+  "focus_scans": 10,
   "focus_change": "0010",
   "change_decay": 0.2,
   "focus_tolerance": "0001",
-  "focus_limit": "0083"
+  "focus_limit": "0083",
+  "focus_ROI": "full"
 }

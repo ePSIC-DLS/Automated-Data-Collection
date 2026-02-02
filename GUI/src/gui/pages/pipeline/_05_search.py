@@ -262,7 +262,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
     def __init__(self, size: int, grids: Management, image: SurveyImage, marker: np.int_, done: np.int_,
                  failure_action: typing.Callable[[Exception], None], mic: microscope.Microscope,
-                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline,drift_correction):
+                 scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline,drift_correction, focus_correction):
+                # Change made by YX 20260128 - running focus corr before first scan         
+                # scanner: microscope.Scanner, clusters: Clusters, pipeline: ProcessingPipeline,drift_correction):
+                    
+                    
         DeepSearch.SIZES = tuple(s for s in DeepSearch.SIZES if s < size)
         CanvasPage.__init__(self, size)
         SettingsPage.__init__(self, utils.SettingsDepth.REGULAR | utils.SettingsDepth.ADVANCED,
@@ -336,11 +340,16 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         
         # Yiming added:
         self.drift_correction = drift_correction
+        
+        # YX added 20260128:
+        self.focus_correction = focus_correction
+        
         # when the user draws a region on survey image, use it as drift reference
         image.driftRegion.connect(self.drift_correction.set_ref)
         # whenever a new drift vector is calculated, shift the grids in DeepSearch class
         self.drift_correction.drift.connect(self.update_grids)
         self.runStart.connect(self.drift_correction.run)
+        self.runStart.connect(self.focus_correction.run)# added to run focus before merlin
         
 
     def _img(self, img: images.RGBImage) -> np.ndarray:
