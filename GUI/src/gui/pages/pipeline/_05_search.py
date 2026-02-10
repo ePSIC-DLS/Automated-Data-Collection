@@ -394,7 +394,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
         """
         self._resolution = new
 
-    def update_grids(self, x_shift: int, y_shift: int):
+    def update_grids(self, x_shift: float, y_shift: float):
         """
         Move all the scan regions, linked to drift correction.
 
@@ -478,6 +478,23 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
     @utils.Stoppable.decorate(manager=ProcessPage.MANAGER)
     @utils.Tracked
     def _run(self, current: typing.Optional[int]):
+        def get_px_res(): # Added by ED: from Damien's function translated into Max OOP 
+            """
+            Given detector, will retrieve the magnification and output the resolution
+            Returns in Angstroms
+            """
+            
+            # THIS NEEDS FIXING TO GRAB CORRECTLY FROM MAX TM!
+            magnification = int(self._mic.subsystems["EOS"].magnification()) # error this subsystem has no GetMagValue
+        
+            #Get the pixels per meter value
+            detectorData = self._engine.get_detectorsetting()
+            ppmh = detectorData['OutputImageInformation']['PixelsPerMeter']['Horizontal']
+            pixel_size = 1 / (ppmh * magnification)
+            pixel_size *= 10**(10) # convert m to angstroms
+            self._resolutionA2p = pixel_size
+            return pixel_size
+        
         def _reg_scan():
             with self._mic.subsystems["Deflectors"].switch_blanked(False):
                 with self._mic.subsystems["Detectors"].switch_inserted(True):
@@ -497,6 +514,9 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     f.create_dataset("Thresholded Image", data=self._pipeline())
                 if images_saved & utils.Stages.SURVEY:
                     f.create_dataset("Survey Scan", data=self._survey())
+                #if images_saved:
+                #    pixel_size = get_px_res() # Added by ED 6-2-26
+                #    f.create_dataset("Resolution Angstrom2pixel", data=pixel_size) # Added by ED 6-2-26
 
         def _merlin_scan():
             # time.sleep(1) # YX commenting this out
@@ -555,7 +575,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
             merlin_cmd.setValue('FILEDIRECTORY', save_path)
             merlin_cmd.setValue('FILEENABLE', 1)
             # trigger set up and filesaving
-            merlin_cmd.setValue('SAVEALLTOFILE', 1)
+            merlin_cmd.setValue('SAVEALLTOFILE', 1)  # can change this to spit out every DP individually, ie if you want to only do a few and run logic on
             merlin_cmd.setValue('USETIMESTAMPING', 1)
             # setting up VDF with STEM mode
             merlin_cmd.setValue('SCANX', px_val)

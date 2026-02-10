@@ -3,6 +3,7 @@ from .._utils import *
 from ... import validation
 from typing import Tuple as _tuple
 
+
 if ONLINE:
     from PyJEM.TEM3 import EOS3
 
@@ -128,6 +129,7 @@ class Controller(Base):
         magnification.validate(value)
         new = self._vals.index(value)
         self._controller.SetStemCamSelector(new)
+    
 
     def __init__(self, curr_mag: int = None, curr_length: int = None):
         super().__init__("EOS")

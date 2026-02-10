@@ -286,6 +286,7 @@ class Controller(Base):
             metadata_group['field_of_view(m)'] = local_fov
             metadata_group['step_size(m)'] = local_fov / scan_size
             metadata_group['zero_OLfine'] = self._zdf
+            # metadata_group['Resolution Angstrom2pixel'] = self._resolutionA2p # ED added 6-2-26 calculated in 05_search - commented out
 
             with self._systems["Lenses"].switch_lens(Lens.OL_FINE):
                 metadata_group['current_OLfine'] = self._systems["Lenses"].value

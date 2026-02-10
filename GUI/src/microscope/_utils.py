@@ -49,6 +49,7 @@ class Switch(typing.Generic[R]):
     def __call__(self, new: R):
         self._switch(new)
         if self._delay:
+            # print("delaying of this amount via Call!!!", self._delay)
             time.sleep(self._delay)
 
     def __enter__(self) -> None:
@@ -113,6 +114,7 @@ class Key(typing.Generic[Inst, R]):
     def __get__(self, instance: Inst, owner: typing.Type[Inst]) -> R:
         r_val = self._getter(instance)
         if self._delay:
+            # print("delaying of this amount via get!!!", self._delay)
             time.sleep(self._delay)
         if self._setter is not None:
             self._switch = Switch(r_val, functools.partial(self._setter, instance), self._delay)
@@ -123,6 +125,7 @@ class Key(typing.Generic[Inst, R]):
             raise ValueError(f"Property {self._name} is read-only")
         self._setter(instance, value)
         if self._delay:
+            # print("delaying of this amount via set!!!", self._delay)
             time.sleep(self._delay)
         self._switch = Switch(value, functools.partial(self._setter, instance), self._delay)
 
@@ -210,13 +213,13 @@ class ScanType(abc.ABC):
         self._size = size
 
     @abc.abstractmethod
-    def rect(self) -> _tuple[int, int, int, int]:
+    def rect(self) -> _tuple[float, float, float, float]:
         """
         Method for determining scan rectangle based on QD specification.
 
         Returns
         -------
-        tuple[int, int, int, int]
+        tuple[float, float, float, float]
             A tuple representing starting x, ending x, starting y, and ending y.
         """
         pass
@@ -227,7 +230,7 @@ class FullScan(ScanType):
     Concrete scan type for a full scan.
     """
 
-    def rect(self) -> _tuple[int, int, int, int]:
+    def rect(self) -> _tuple[float, float, float, float]:
         return 0, self._size[0], 0, self._size[1]
 
 
@@ -237,17 +240,17 @@ class AreaScan(ScanType):
 
     Attributes
     ----------
-    _w: int
+    _w: float
         The width of the subregion.
-    _h: int
+    _h: float
         The height of the subregion.
-    _l: int
+    _l: float
         The left edge of the subregion.
-    _r: int
+    _r: float
         The right edge of the subregion.
-    _t: int
+    _t: float
         The top edge of the subregion.
-    _b: int
+    _b: float
         The bottom edge of the subregion.
 
     Raises
@@ -256,7 +259,7 @@ class AreaScan(ScanType):
         If the rectangle size is negative.
     """
 
-    def __init__(self, full_size: _tuple[int, int], rect_size: _tuple[int, int], offset=(0, 0)):
+    def __init__(self, full_size: _tuple[int, int], rect_size: _tuple[float, float], offset=(0.0, 0.0)):
         super().__init__(full_size)
         if any(r < 0 for r in rect_size):
             raise ValueError("Rect size must be positive")
@@ -264,11 +267,11 @@ class AreaScan(ScanType):
         self._l, self._t = offset
         self._r, self._b = self._l + self._w, self._t + self._h
 
-    def rect(self) -> _tuple[int, int, int, int]:
+    def rect(self) -> _tuple[float, float, float, float]:
         return self._l, self._r, self._t, self._b
 
     @classmethod
-    def from_corners(cls, full_size: _tuple[int, int], tl: _tuple[int, int], br: _tuple[int, int]) -> "AreaScan":
+    def from_corners(cls, full_size: _tuple[int, int], tl: _tuple[float, float], br: _tuple[float, float]) -> "AreaScan":
         """
         Alternative constructor to create a subregion scan from the known corner positions.
 
@@ -276,9 +279,9 @@ class AreaScan(ScanType):
         ----------
         full_size: tuple[int, int]
             The full scan size.
-        tl: tuple[int, int]
+        tl: tuple[float, float]
             The top-left corner.
-        br: tuple[int, int]
+        br: tuple[float, float]
             The bottom-right corner.
 
         Returns
@@ -530,3 +533,4 @@ class EdgeType(enum.Enum):
 
 
 edge_type = validation.Pipeline.enum(EdgeType)
+

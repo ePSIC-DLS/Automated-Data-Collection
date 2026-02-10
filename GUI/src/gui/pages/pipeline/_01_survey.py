@@ -62,7 +62,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._drift_size = utils.LabelledWidget("Drift Region", utils.ComboBox(16, 32, 64, 128),
                                                 utils.LabelOrder.SUFFIX)
         self._export = widgets.QPushButton("Export region")
-        self._co_ords = (0, 0, 0, 0)
+        self._co_ords = (float(0), float(0), float(0), float(0)) # changed to float from int 4-2-26 ED
         self._export.clicked.connect(lambda: self._region_export())
 
         self._regular.addWidget(self._polygon_mode)
@@ -93,6 +93,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._scanner.scan_area = region
         print("###############region defined in SURVEY IMAE:")
         print(region)
+
         self._modified_image = self._scan(region, True).norm().dynamic().promote()
         self._original_image = self._modified_image.copy()
         self._canvas.draw(self._modified_image)
@@ -142,7 +143,7 @@ class SurveyImage(ClusterPage, SettingsPage):
             except IndexError as err:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Drift Region Error", str(err))
             self._canvas.draw(self._modified_image)
-            self._co_ords = (left, top, right, bottom)
+            self._co_ords = (float(left), float(top), float(right), float(bottom)) # changed to float from int 4-2-26 ED
             return
         if btn == enums.LeftButton:
             self._polygon.append((pos.x(), pos.y()))

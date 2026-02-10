@@ -160,7 +160,7 @@ class Controller(Base):
         validation.examples.any_bool.validate(value)
         self._controller.SetBeamBlank(int(value))
 
-    blanked.delay = 1.5
+    blanked.delay = 1.5 
 
     def __init__(self, beam_status: bool = None):
         super().__init__("Deflectors")

@@ -6,7 +6,7 @@ from ... import validation
 
 if ONLINE:
     from PyJEM.TEM3 import Detector3
-
+import time
 
 class Detector3Offline:
     """
@@ -154,6 +154,8 @@ class Controller(Base):
     def inserted(self, value: bool):
         validation.examples.any_bool.validate(value)
         self._controller.SetPosition(self.current.value, int(value))
+
+    inserted.delay = 4.5 #ZN added to enforce ADF1 isnertion wait time
 
     @Key
     def brightness(self) -> int:

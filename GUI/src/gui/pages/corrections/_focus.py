@@ -390,7 +390,7 @@ class AutoFocus(ShortCorrectionPage):
                 # Final move
                 link.value = ideal_OLf
 
-            # --- Execution ---
+            # # --- Execution ---
             with link.switch_lens(microscope.Lens.OL_FINE):
                 with self._link.subsystems["Detectors"].switch_inserted(True):
                     print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")

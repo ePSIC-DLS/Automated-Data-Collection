@@ -258,8 +258,8 @@ if QD:
         def scan_area(self, value: ScanType):
             valid_type.validate(value)
             self._region = value
-            self._engine.set_image_area(*value.size, *value.rect())
-
+            self._engine.set_image_area(*value.size, int(value.rect()[0]), int(value.rect()[1]),int(value.rect()[2]),int(value.rect()[3])) # ED changed to int 4-2-26
+            
         @Key
         def dwell_time(self) -> float:
             """
@@ -378,7 +378,7 @@ if QD:
                 self._engine.stop_imaging()
                 monitor.wait_for_image()
                 if return_:
-                    img = monitor.pop().get_input_data(3)[sy:ey, sx:ex]
+                    img = monitor.pop().get_input_data(3)[int(sy):int(ey), int(sx):int(ex)]
                     return GreyImage(img.astype(np.int_))
             elif return_:
                 return GreyImage.from_file("./assets/img_3.bmp", do_static=True)
@@ -699,3 +699,4 @@ else:
         switch_scan_area = scan_area.switch
         switch_dwell_time = dwell_time.switch
         switch_flyback = flyback.switch
+

@@ -18,17 +18,17 @@ class ScanRegion:
     ----------
     _disabled: bool
         Whether the region is disabled.
-    _left: int
+    _left: float
         The minimum x-coordinate of the square.
-    _top: int
+    _top: float
         The minimum y-coordinate of the square.
-    _right: int
+    _right: float
         The maximum x-coordinate of the square.
-    _bottom: int
+    _bottom: float
         The maximum y-coordinate of the square.
     _scan_res: int
         The resolution of the scan.
-    _delta: int
+    _delta: float
         The difference between the minima and maxima of the square.
     """
 
@@ -49,18 +49,18 @@ class ScanRegion:
         self._disabled = value
 
     @property
-    def size(self) -> int:
+    def size(self) -> float:
         """
         Public access to the region's width and height.
 
         Returns
         -------
-        int
+        float
             The difference between the minima and maxima of the square.
         """
         return self._delta
 
-    def __init__(self, top_left: _tuple[int, int], size: int, scan_resolution: int):
+    def __init__(self, top_left: _tuple[float, float], size: float, scan_resolution: int):
         self._disabled = False
         self._left, self._top = top_left
         self._right = self._left + size
@@ -74,7 +74,7 @@ class ScanRegion:
     def __hash__(self) -> int:
         return hash((self._left, self._top, self._right, self._bottom, self._scan_res))
 
-    def __getitem__(self, item: images.AABBCorner) -> _tuple[int, int]:
+    def __getitem__(self, item: images.AABBCorner) -> _tuple[float, float]:
         """
         Grab a corner of the square.
 
@@ -85,7 +85,7 @@ class ScanRegion:
 
         Returns
         -------
-        tuple[int, int]
+        tuple[float, float]
             The cartesian coordinates of the corner.
 
         Raises
@@ -122,7 +122,7 @@ class ScanRegion:
         if not isinstance(other, int):
             return NotImplemented
         ratio = other / self._scan_res
-        return ScanRegion((int(self._left * ratio), int(self._top * ratio)), int(self._delta * ratio), other)
+        return ScanRegion((self._left * ratio, self._top * ratio), self._delta * ratio, other)
 
     __rmatmul__ = __matmul__
 
@@ -142,7 +142,9 @@ class ScanRegion:
         """
         if not isinstance(other, Cluster):
             return NotImplemented
-        area = other.cluster.region(self[images.AABBCorner.TOP_LEFT], self[images.AABBCorner.BOTTOM_RIGHT]).data()
+        tl = tuple(map(int, self[images.AABBCorner.TOP_LEFT]))
+        br = tuple(map(int, self[images.AABBCorner.BOTTOM_RIGHT]))
+        area = other.cluster.region(tl, br).data()
         count = np.count_nonzero(area)
         return count
 
@@ -184,10 +186,11 @@ class ScanRegion:
         """
         if self._disabled:
             return
-        onto.drawings.square.size((self._left, self._top), self._delta, outline, safe=True,
+        onto.drawings.square.size((int(self._left), int(self._top)), int(self._delta), outline, safe=True,
                                   fill=None if not filled else outline)
 
-    def move(self, by: _tuple[int, int]):
+    # def move(self, by: _tuple[int, int]):
+    def move(self, by: _tuple[float, float]):
         """
         Shift the co-ordinates of the region.
 
@@ -603,3 +606,4 @@ class Cluster:
         bg = images.RGBImage.blank(im_size)
         bg.drawings.polygon.vertices(label, v1, v2, v3, *v_e)
         return cls(bg.downchannel(0, label), label)
+
