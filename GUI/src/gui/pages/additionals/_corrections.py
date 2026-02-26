@@ -70,16 +70,21 @@ class Manager(Page):
     def _child_visibility(self, value: utils.Corrections):
         self._master.show()
         for i, c in enumerate(self._corrections.values()):
-            c.setEnabled(False)
+            # c.setEnabled(False)
+            # YX changing23/Feb
+            c.isEnabled = False
             self._master.setTabEnabled(i, False)
         if value & utils.Corrections.DRIFT:
-            self._corrections["drift"].setEnabled(True)
+            # self._corrections["drift"].setEnabled(True)
+            self._corrections["drift"].isEnabled = True
             self._master.setTabEnabled(2, True)
         if value & utils.Corrections.EMISSION:
-            self._corrections["emission"].setEnabled(True)
+            # self._corrections["emission"].setEnabled(True)
+            self._corrections["emission"].isEnabled = True
             self._master.setTabEnabled(1, True)
         if value & utils.Corrections.FOCUS:
-            self._corrections["focus"].setEnabled(True)
+            # self._corrections["focus"].setEnabled(True)
+            self._corrections["focus"].isEnabled = True
             self._master.setTabEnabled(0, True)
         for tab_i in range(3):
             if self._master.isTabEnabled(tab_i):

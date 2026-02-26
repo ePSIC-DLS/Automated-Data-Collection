@@ -33,6 +33,9 @@ class Flash(LongCorrectionPage):
         self._live.needsReset.connect(self.conditionHit.emit)
         self._regular.addWidget(self._live)
         self.setLayout(self._layout)
+        
+        
+        self.isEnabled = False # YX added 23Feb - default false not doing this corr
 
     @utils.Thread.decorate(manager=LongCorrectionPage.MANAGER)
     def background(self):
@@ -48,7 +51,7 @@ class Flash(LongCorrectionPage):
             time.sleep(self.DELAY)
 
     def run(self):
-        if not self.isEnabled():
+        if not self.isEnabled:
             return
         self.runStart.emit()
         # if microscope.ONLINE:

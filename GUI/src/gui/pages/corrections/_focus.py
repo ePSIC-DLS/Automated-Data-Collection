@@ -117,7 +117,7 @@ class AutoFocus(ShortCorrectionPage):
         # self._regular.addWidget(self._tolerance)
 
         self._plot = utils.Canvas(survey_size)
-
+        self.isEnabled = False # YX added 23Feb - default false not doing this corr
         self._focus_change = self._df
         self._change_decay = self._decay
         self._focus_tolerance = self._tolerance
@@ -149,7 +149,7 @@ class AutoFocus(ShortCorrectionPage):
         Performs the autofocus routine using a Robust Multiresolution optimization.
         Includes Parabolic Fitting and Safety Rollback.
         """
-        if not self.isEnabled():
+        if not self.isEnabled:
             return
         self.runStart.emit()
 
@@ -390,7 +390,8 @@ class AutoFocus(ShortCorrectionPage):
                 # Final move
                 link.value = ideal_OLf
 
-            # # --- Execution ---
+            # --- Execution ---
+            # YX commenting out focus correction - not needed for NBED
             with link.switch_lens(microscope.Lens.OL_FINE):
                 with self._link.subsystems["Detectors"].switch_inserted(True):
                     print("££££$$$$~~~~ sleeping 2 s waiting for ADF detector")

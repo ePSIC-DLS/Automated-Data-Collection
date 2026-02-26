@@ -4,7 +4,7 @@
   "marker_colour": "#00FF00",
   "histogram_outline": "#FFFFFF",
   "pattern_colour": "#00FF00",
-  "init_dwell": 15e-6,
+  "init_dwell": 30e-6,
   "finished_colour": "#FFFF00",
   "engine_type": "QD",
   "microscope": true,
@@ -118,7 +118,7 @@
   "cluster_size": 5,
   "size_match": "NO_LOWER",
   "epsilon": 4.2,
-  "minimum_samples": 50,
+  "minimum_samples": 30,
   "match": 0.01,
   "overlap": 0.1,
   "overlap_directions": [
@@ -126,7 +126,7 @@
     false,
     false
   ],
-  "scan_size": 128,
+  "scan_size": 256,
   "exposure_time": 1e-3,
   "bit_depth": 6,
   "save_path": "X:/data/2026/{session}/Merlin/{sample}",
@@ -138,10 +138,10 @@
   ],
   "scan_mode": true,
   "session": "'cm44133-1'",
-  "sample": "'Test_Merlin'",
+  "sample": "'Pt_NP_24Feb_Overnight_run2'",
   "corrections_enabled": [
     true,
-    true,
+    false,
     false
   ],
   "scan_resolution": 4096,
@@ -180,7 +180,7 @@
     "low": 0,
     "high": 256
   },
-  "drift_scans": 0,
+  "drift_scans": 3,
   "windowing": [
     false,
     false,
@@ -198,5 +198,5 @@
   "change_decay": 0.2,
   "focus_tolerance": "0001",
   "focus_limit": "0083",
-  "focus_ROI": "full"
+  "focus_ROI": "drift"
 }

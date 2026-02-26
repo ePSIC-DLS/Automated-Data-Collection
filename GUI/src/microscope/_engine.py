@@ -371,6 +371,8 @@ if QD:
             """
             x_size, y_size = self._region.size
             sx, ex, sy, ey = self._region.rect()
+            # print("sx, ex, sy, ey",sx, ex, sy, ey)
+            # print("x_size, y_size", x_size, y_size)
             if ONLINE:
                 monitor = FrameMonitor(x_size + 1, y_size + 1, inputs=[3], max_queue_size=1)
                 monitor.register(self._engine)

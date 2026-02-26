@@ -57,7 +57,8 @@ default_settings = load_settings("assets/config.json",
                                  scan_mode=validation.examples.any_bool,
                                  session=validation.examples.save_path,
                                  sample=validation.examples.save_path,
-                                 scan_resolution=validation.examples.resolution
+                                 scan_resolution=validation.examples.resolution,
+                                 size=validation.examples.resolution
                                  )
 
 
@@ -287,6 +288,7 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
 
         def _survey_image() -> np.ndarray:
             return self._img(image.modified)
+        
 
         self._colour_option.hide()
         self._regions: _tuple[utils.ScanRegion, ...] = ()
@@ -534,6 +536,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                 merlin_cmd.MPX_CMD(type_cmd='CMD', cmd='SCANSTARTRECORD')
                 time.sleep(1)
                 print('6')
+                # print("QD subscan region:", subscan_region)
+                # print("QD full resoltion:", full_image_size)
+                # print("QD flyback time:", self._scanner.flyback)
+                # print("QD dwell time:",self._scanner.dwell_time)
+                # print("QD trigger")
 
                 _ = self._scanner.scan(return_=False)
                 time.sleep(1) # YX changed from 1 to 0.001
@@ -623,6 +630,11 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val+1), top_left_4k) # Adding 1 extra lines 
                     
+                    #### Applying an offset - YX & MD
+                    offset_150kx = 56
+                    scan_area._l = scan_area._l - offset_150kx
+                    scan_area._r = scan_area._r - offset_150kx
+                    
                     print(f"from _05_search Line 597, scan_area: {scan_area._w, scan_area._h}")
                     with self._scanner.switch_scan_area(scan_area):
                         # print(f"******scan area: {scan_area.rect}******")
@@ -643,10 +655,19 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                         _file_write()
                         
                         if do_merlin:
-                            with h5py.File(params, "a") as co_ords:
-                                dset = co_ords.create_group("Co-ordinates (cartesian, non-scaled)")
-                                dset.attrs["top left"] = top_left
-                                dset.attrs["bottom right"] = bottom_right
+                            with h5py.File(params, "a") as _f:
+                                dset = _f.create_group("Co-ordinates (cartesian, non-scaled)")
+                                TL_x,TL_y = top_left
+                                BR_x, BR_y = bottom_right
+                                dset.attrs["top left"] = (TL_x,TL_y) 
+                                dset.attrs["bottom right"] = (BR_x,BR_y)
+                                
+                                
+                                dset = _f.create_group("Sampling")
+                                dset.attrs["Merlin_sampling"] = self._resolution
+                                dset.attrs["Survey_sampling"] = default_settings['size']
+                                
+                                
                             merlin_params = {'set_dwell_time(usec)': exposure, 'set_scan_px': px_val,
                                               'set_bit_depth': bit_depth}
                             self._mic.export(params, px_val, **merlin_params)

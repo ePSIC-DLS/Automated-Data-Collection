@@ -121,6 +121,8 @@ class TranslateRegion(ShortCorrectionPage):
         self._regular.addWidget(self._drift_resolution)
         self._regular.addWidget(self._windowing)
         self._regular.addWidget(self._order)
+        
+        self.isEnabled = False # YX added 23Feb - default false not doing this corr
 
         self._calculated_shift = (0,0)
         self._shift = utils.SizeControl(0, 1, validation.examples.any_int)
@@ -190,7 +192,7 @@ class TranslateRegion(ShortCorrectionPage):
 
     @utils.Tracked
     def run(self):
-        if not self.isEnabled():
+        if not self.isEnabled:
             return
         if self._ref is None:
             raise StagingError("drift correction", "exporting drift region")
@@ -316,6 +318,7 @@ class TranslateRegion(ShortCorrectionPage):
         #self._outputs[1, 1].draw(overlap.downchannel(0, overlap.make_green(), invalid=images.ColourConvert.TO_FG).upchannel(), resize=True)
         # self._outputs[1, 1].draw( ,resize=True)  
         self._shift.change_data((correction_app[1], correction_app[0])) #Edited by ED 6-2-26 self._calculated_shift) # Added by YX 23May2025
+        
         
         self.drift.emit(correction_app[1], correction_app[0]) # YX 04Sept
 

@@ -335,6 +335,7 @@ class Management(CanvasPage, SettingsPage[Filter], ProcessPage):
                     cluster.divide(pitch, overlap, off_dir, self._canvas.image_size[0])
                     for off_dir in overlaps
                 )
+                print('Defined Overlap: ', overlap)
             except ValueError as err:
                 raise GUIError(utils.ErrorSeverity.WARNING, "Division Error", f"For {cluster}, {err}")
             cluster.locked = True
