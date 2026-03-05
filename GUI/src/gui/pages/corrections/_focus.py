@@ -15,6 +15,8 @@ from ..._base import images, microscope, ShortCorrectionPage
 from .... import load_settings, validation
 from ..._errors import *
 
+
+
 default_settings = load_settings("assets/config.json",
                                  focus_scans=validation.examples.focus,
                                  focus_change=validation.examples.focus_change,
@@ -23,6 +25,7 @@ default_settings = load_settings("assets/config.json",
                                  focus_limit=validation.examples.focus_limit_hex,
                                  focus_ROI=validation.examples.any_str,
                                  drift_resolution=validation.examples.resolution,
+                                 focus_offset=validation.examples.any_str
                                  )
 
 
@@ -175,6 +178,7 @@ class AutoFocus(ShortCorrectionPage):
                 
             # elif self.focus_corr_type = 'Python':
             link = self._link.subsystems["Lenses"]
+            def_per_bit = self._link.defocus_per_bit
 
             # --- Helper Functions ---
             def _norm_var(img_data: np.ndarray) -> float:
@@ -235,7 +239,8 @@ class AutoFocus(ShortCorrectionPage):
                 return vertex_x, vertex_y
 
             # --- Optimization Logic ---
-            def optimize_robust(coarse_range, fine_step, fine_window):
+            # Adding focus offset logic 5 March 2026 - MD
+            def optimize_robust(coarse_range, fine_step, fine_window, def_offset=None):
                 base_OLf = link.value
                 
                 # Setup Plot
@@ -388,7 +393,14 @@ class AutoFocus(ShortCorrectionPage):
                     plt.show() # Final show
                 
                 # Final move
-                link.value = ideal_OLf
+                if def_offset == None:
+                    link.value = ideal_OLf
+                else:
+                    def_offset_val = float(def_offset)
+                    new_OLf = ideal_OLf + int(def_offset_val / def_per_bit)
+                    link.value = new_OLf
+                    print(f"APPLYING DEF OFFSET TO : {ideal_OLf:04X}")
+                    
 
             # --- Execution ---
             # YX commenting out focus correction - not needed for NBED
@@ -408,7 +420,9 @@ class AutoFocus(ShortCorrectionPage):
                     # Fine window is the size of 2 coarse steps to ensure overlap
                     fine_window = coarse_step * 2
     
-                    optimize_robust(coarse_range, fine_step, fine_window)
+                    optimize_robust(coarse_range, fine_step, fine_window, def_offset=default_settings["focus_offset"])
+                    print("FOCUS OFFSET: ", default_settings["focus_offset"])
+                    
 
         self.runEnd.emit()
 

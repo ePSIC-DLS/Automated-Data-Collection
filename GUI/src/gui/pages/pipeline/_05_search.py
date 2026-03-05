@@ -630,10 +630,22 @@ class DeepSearch(CanvasPage, SettingsPage[GridSettings], ProcessPage):
                     scan_area = microscope.AreaScan((self._resolution, self._resolution),
                                                     (px_val, px_val+1), top_left_4k) # Adding 1 extra lines 
                     
-                    #### Applying an offset - YX & MD
-                    offset_150kx = 56
-                    scan_area._l = scan_area._l - offset_150kx
-                    scan_area._r = scan_area._r - offset_150kx
+                    # Adding logic to apply shift depending on the MAG:
+                        
+                    survey_mag = int(self._mic.subsystems["EOS"].magnification)
+                    print("SURVEY MAG:  ", survey_mag)
+                    if survey_mag == 150000:
+                        #### Applying an offset - YX & MD
+                        offset = 56
+                    elif survey_mag == 250000: # for 4M
+                        offset = 20
+                    elif survey_mag == 500000: # for 3M
+                        offset = 30
+                    else:
+                        offset = 0
+                    
+                    scan_area._l = scan_area._l - offset
+                    scan_area._r = scan_area._r - offset
                     
                     print(f"from _05_search Line 597, scan_area: {scan_area._w, scan_area._h}")
                     with self._scanner.switch_scan_area(scan_area):

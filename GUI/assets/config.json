@@ -137,12 +137,12 @@
     true
   ],
   "scan_mode": true,
-  "session": "'cm44133-1'",
-  "sample": "'Pt_NP_24Feb_Overnight_run2'",
+  "session": "'mg44468-1'",
+  "sample": "'Pt_NP_Overnight_5March2026'",
   "corrections_enabled": [
     true,
     false,
-    false
+    true
   ],
   "scan_resolution": 4096,
   "selected": "raster",
@@ -180,7 +180,7 @@
     "low": 0,
     "high": 256
   },
-  "drift_scans": 3,
+  "drift_scans": 0,
   "windowing": [
     false,
     false,
@@ -193,10 +193,11 @@
   ],
   "drift_resolution": 4096,
   "min_emission": 3.5,
-  "focus_scans": 10,
+  "focus_scans": 1,
   "focus_change": "0010",
   "change_decay": 0.2,
   "focus_tolerance": "0001",
   "focus_limit": "0083",
-  "focus_ROI": "drift"
+  "focus_ROI": "drift",
+  "focus_offset": "40"
 }

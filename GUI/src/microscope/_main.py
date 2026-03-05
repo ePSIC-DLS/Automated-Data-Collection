@@ -77,6 +77,26 @@ class Controller(Base):
     _def: Def3
         The controller for the deflector system - note that this is the raw PyJEM controller.
     """
+    def __init__(self, detector: Detector, inserted: bool, lens: Lens, axis: Axis, /, zdf=38942, *,
+                 aperture: AptKind = None, beam: bool = None, magnification: int = None, camera_length: int = None,
+                 valve: bool = None, driver: Driver = None):
+        super().__init__("All")
+        self._systems: SubSystems = {
+            "Stage": controllers.Stage(axis, driver),
+            "Lenses": controllers.Lens(lens),
+            "Gun": controllers.Gun(),
+            "FEG": controllers.Feg(valve),
+            "EOS": controllers.Eos(magnification, camera_length),
+            "Detectors": controllers.Detector((detector, inserted)),
+            "Deflectors": controllers.Deflector(beam),
+            "Apertures": controllers.Aperture(aperture),
+        }
+        self._zdf = zdf
+        self._ht = HT3()
+        self._scan = Scan3()
+        self._eos = EOS3()
+        self._gun = GUN3()
+        self._def = Def3()
 
     @Key
     def merlin_camera_length(self) -> float:
@@ -230,26 +250,7 @@ class Controller(Base):
         """
         return self._systems.copy()
 
-    def __init__(self, detector: Detector, inserted: bool, lens: Lens, axis: Axis, /, zdf=38942, *,
-                 aperture: AptKind = None, beam: bool = None, magnification: int = None, camera_length: int = None,
-                 valve: bool = None, driver: Driver = None):
-        super().__init__("All")
-        self._systems: SubSystems = {
-            "Stage": controllers.Stage(axis, driver),
-            "Lenses": controllers.Lens(lens),
-            "Gun": controllers.Gun(),
-            "FEG": controllers.Feg(valve),
-            "EOS": controllers.Eos(magnification, camera_length),
-            "Detectors": controllers.Detector((detector, inserted)),
-            "Deflectors": controllers.Deflector(beam),
-            "Apertures": controllers.Aperture(aperture),
-        }
-        self._zdf = zdf
-        self._ht = HT3()
-        self._scan = Scan3()
-        self._eos = EOS3()
-        self._gun = GUN3()
-        self._def = Def3()
+
 
     def export(self, file: str, scan_size: int, **merlin):
         """

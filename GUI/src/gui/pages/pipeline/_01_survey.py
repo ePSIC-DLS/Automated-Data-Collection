@@ -11,6 +11,7 @@ from ..._errors import *
 from ....microscope import ScanType, ONLINE, FullScan, Scanner
 
 
+
 class SurveyImage(ClusterPage, SettingsPage):
     """
     Concrete page representing the initial scan - the image that surveys the scene.
@@ -93,6 +94,7 @@ class SurveyImage(ClusterPage, SettingsPage):
         self._scanner.scan_area = region
         print("###############region defined in SURVEY IMAE:")
         print(region)
+        
 
         self._modified_image = self._scan(region, True).norm().dynamic().promote()
         self._original_image = self._modified_image.copy()

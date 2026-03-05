@@ -198,7 +198,7 @@ class TranslateRegion(ShortCorrectionPage):
             raise StagingError("drift correction", "exporting drift region")
         self.runStart.emit()
         x_shift, y_shift = map(int, self._shift.get_data())
-        print(f'x_shift, y_shift :  {x_shift, y_shift}' )
+        print(f'before shifting reference x_shift, y_shift :  {x_shift, y_shift}' )
 
 
         with self._link.subsystems["Detectors"].switch_inserted(True):
@@ -270,6 +270,7 @@ class TranslateRegion(ShortCorrectionPage):
         corr, error, _ = convolve(ref_pad, new_pad) 
 
         shift = -corr
+        print(f'corr = {corr}')
         print(f"SHIFT MEASURED: {shift} - error:  {error} - phasediff: {_}")
 
         # # --- START ACCUMULATOR LOGIC ---
@@ -319,19 +320,22 @@ class TranslateRegion(ShortCorrectionPage):
         # self._outputs[1, 1].draw( ,resize=True)  
         self._shift.change_data((correction_app[1], correction_app[0])) #Edited by ED 6-2-26 self._calculated_shift) # Added by YX 23May2025
         
-        
         self.drift.emit(correction_app[1], correction_app[0]) # YX 04Sept
 
         # NEW: Update the Drift Scan Region to "chase" the drifting feature
         # ---------------------------------------------------------------------
         # correction_app is [y, x], but move() expects (x, y)
         if self._region is not None:
-             self._region.move((correction_app[1], correction_app[0]))
-             print(f"Drift Scan Region moved by: {correction_app[1], correction_app[0]}")
+            print(f'region is {self._region}')
+            self._region.move((correction_app[1], correction_app[0]))
+            
+
+            print(f"Drift Scan Region moved by: {correction_app[1], correction_app[0]}")
         # ---------------------------------------------------------------------
         
         if microscope.ONLINE:
-            self._ref = new # update _ref image with new drift image
+            
+            # self._ref = new # update _ref image with new drift image
             # updatedSurveyImage = self._scan(
             #     microscope.AreaScan(self._o_size, self._o_size), True #,(0,0)
             #     ).norm().dynamic().promote()
